@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import type { Session } from '@supabase/supabase-js'
-import { supabase } from '../lib/supabase'
+import { supabase, supabaseConfigError } from '../lib/supabase'
 import type { MeuContexto } from '../types/auth'
 
 type AuthContextValue = {
@@ -18,10 +18,16 @@ const AuthContext = createContext<AuthContextValue | undefined>(undefined)
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null)
   const [contexto, setContexto] = useState<MeuContexto | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [contextoError, setContextoError] = useState<string | null>(null)
+  const [loading, setLoading] = useState(!supabaseConfigError)
+  const [contextoError, setContextoError] = useState<string | null>(supabaseConfigError)
 
   const loadContexto = async (activeSession: Session | null) => {
+    if (supabaseConfigError) {
+      setContexto(null)
+      setContextoError(supabaseConfigError)
+      return
+    }
+
     if (!activeSession) {
       setContexto(null)
       setContextoError(null)
@@ -44,8 +50,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   useEffect(() => {
+    if (supabaseConfigError) {
+      setLoading(false)
+      return
+    }
+
     const bootstrap = async () => {
-      const { data } = await supabase.auth.getSession()
+      const { data, error } = await supabase.auth.getSession()
+      if (error) {
+        setContextoError('Não foi possível inicializar a sessão do Supabase.')
+        setLoading(false)
+        return
+      }
       setSession(data.session)
       await loadContexto(data.session)
       setLoading(false)
@@ -70,10 +86,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     loading,
     contextoError,
     signIn: async (email, password) => {
+      if (supabaseConfigError) return supabaseConfigError
       const { error } = await supabase.auth.signInWithPassword({ email, password })
       return error ? 'E-mail ou senha inválidos.' : null
     },
     signOut: async () => {
+      if (supabaseConfigError) return
       await supabase.auth.signOut()
     },
     refreshContexto: async () => {
