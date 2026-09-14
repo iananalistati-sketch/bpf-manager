@@ -3,12 +3,18 @@ import type { Session } from '@supabase/supabase-js'
 import { supabase, supabaseConfigError } from '../lib/supabase'
 import type { MeuContexto } from '../types/auth'
 
+type SignUpResult = {
+  error: string | null
+  needsEmailConfirmation: boolean
+}
+
 type AuthContextValue = {
   session: Session | null
   contexto: MeuContexto | null
   loading: boolean
   contextoError: string | null
   signIn: (email: string, password: string) => Promise<string | null>
+  signUp: (email: string, password: string) => Promise<SignUpResult>
   signOut: () => Promise<void>
   refreshContexto: () => Promise<void>
 }
@@ -89,6 +95,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (supabaseConfigError) return supabaseConfigError
       const { error } = await supabase.auth.signInWithPassword({ email, password })
       return error ? 'E-mail ou senha inválidos.' : null
+    },
+    signUp: async (email, password) => {
+      if (supabaseConfigError) return { error: supabaseConfigError, needsEmailConfirmation: false }
+
+      const { data, error } = await supabase.auth.signUp({ email, password })
+
+      if (error) {
+        return {
+          error: error.message.toLowerCase().includes('password')
+            ? 'A senha não atende aos requisitos mínimos de segurança.'
+            : 'Não foi possível criar a conta. Verifique o e-mail informado e tente novamente.',
+          needsEmailConfirmation: false,
+        }
+      }
+
+      return {
+        error: null,
+        needsEmailConfirmation: !data.session,
+      }
     },
     signOut: async () => {
       if (supabaseConfigError) return
