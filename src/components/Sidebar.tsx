@@ -1,14 +1,21 @@
 import { NavLink } from 'react-router-dom'
 import { PanelLeftClose, PanelLeftOpen, X } from 'lucide-react'
 import { navigationGroups } from '../lib/navigation'
+import { useAuth } from '../hooks/useAuth'
 import { Brand } from './Brand'
 
 interface SidebarProps { collapsed: boolean; onToggle: () => void; onNavigate?: () => void; mobile?: boolean }
 export function Sidebar({ collapsed, onToggle, onNavigate, mobile = false }: SidebarProps) {
+  const { contexto } = useAuth()
+  const permissions = contexto?.permissoes ?? []
+  const visibleGroups = navigationGroups
+    .map(group => ({ ...group, items: group.items.filter(item => permissions.includes(item.permission)) }))
+    .filter(group => group.items.length > 0)
+
   return <>
     <div className="sidebar-brand"><Brand />{mobile && <button className="icon-button" onClick={onNavigate} aria-label="Fechar menu"><X size={20} /></button>}</div>
     <nav aria-label="Navegação principal" className="navigation">
-      {navigationGroups.map(group => <div className="nav-group" key={group.title}><h2>{group.title}</h2>
+      {visibleGroups.map(group => <div className="nav-group" key={group.title}><h2>{group.title}</h2>
         {group.items.map(({ path, title, icon: Icon }) => <NavLink key={path} to={path} onClick={onNavigate} title={collapsed ? title : undefined} aria-label={collapsed ? title : undefined} className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`}><Icon size={18} aria-hidden="true" /><span>{title}</span></NavLink>)}
       </div>)}
     </nav>
