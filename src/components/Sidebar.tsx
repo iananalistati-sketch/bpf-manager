@@ -2,14 +2,14 @@ import { NavLink } from 'react-router-dom'
 import { PanelLeftClose, PanelLeftOpen, X } from 'lucide-react'
 import { navigationGroups } from '../lib/navigation'
 import { useAuth } from '../hooks/useAuth'
+import { hasPermission } from '../lib/permissions'
 import { Brand } from './Brand'
 
 interface SidebarProps { collapsed: boolean; onToggle: () => void; onNavigate?: () => void; mobile?: boolean }
 export function Sidebar({ collapsed, onToggle, onNavigate, mobile = false }: SidebarProps) {
   const { contexto } = useAuth()
-  const permissions = contexto?.permissoes ?? []
   const visibleGroups = navigationGroups
-    .map(group => ({ ...group, items: group.items.filter(item => permissions.includes(item.permission)) }))
+    .map(group => ({ ...group, items: group.items.filter(item => hasPermission(contexto, item.permission)) }))
     .filter(group => group.items.length > 0)
 
   return <>

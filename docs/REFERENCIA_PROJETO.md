@@ -198,6 +198,8 @@ Gestão de:
 - parâmetros da plataforma;
 - cadastros auxiliares.
 
+Estado da primeira versão de Usuários e Perfis (15/09/2026): `/configuracoes` oferece Visão Geral, Usuários e Perfis e Permissões, com acesso granular e consultas reais. A RLS atual limita usuários/vínculos ao próprio cadastro; a interface informa essa limitação. Os perfis e suas permissões são consultáveis, mas nenhuma gravação administrativa foi habilitada. A liberação de leitura ampliada, aprovação, status, vínculos e edição de permissões depende de revisão do backend e auditoria transacional, conforme [proposta e evidências da etapa](CONFIGURACOES_USUARIOS_PERFIS.md).
+
 ## 7. Trilhas de auditoria
 
 A trilha de auditoria deve existir desde a fundação do sistema.

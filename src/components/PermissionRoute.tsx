@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import { Navigate, useLocation } from 'react-router-dom'
 import { ShieldAlert } from 'lucide-react'
 import { useAuth } from '../hooks/useAuth'
+import { hasPermission } from '../lib/permissions'
 
 type PermissionRouteProps = {
   permission: string
@@ -11,11 +12,9 @@ type PermissionRouteProps = {
 export function PermissionRoute({ permission, children }: PermissionRouteProps) {
   const { contexto } = useAuth()
   const location = useLocation()
-  const permissions = contexto?.permissoes ?? []
+  if (hasPermission(contexto, permission)) return <>{children}</>
 
-  if (permissions.includes(permission)) return <>{children}</>
-
-  if (location.pathname !== '/dashboard' && permissions.includes('dashboard.visualizar')) {
+  if (location.pathname !== '/dashboard' && hasPermission(contexto, 'dashboard.visualizar')) {
     return <Navigate to="/dashboard" replace state={{ denied: location.pathname }} />
   }
 
