@@ -9,7 +9,7 @@ alter policy usuarios_authz_reader_proprio on public.usuarios
 alter policy usuario_perfis_authz_reader_proprio on public.usuario_perfis
   using (usuario_id = nullif(current_setting('request.jwt.claim.sub', true), '')::uuid);
 
--- Temporarily allow the function owner to replace its own function, then restore
+-- Temporarily allow the function owner to replace/comment its own function, then restore
 -- the restricted membership/schema posture established by the previous migration.
 grant bpf_authz_reader to postgres with inherit false, set true;
 grant create on schema private to bpf_authz_reader;
@@ -40,15 +40,15 @@ as $function$
      and bool_or(pm.codigo = 'usuarios.gerenciar')
 $function$;
 
+comment on function private.empresa_leitura_usuarios() is
+  'Empresa autorizada para leitura administrativa: subject JWT, usuario ativo e ambas permissoes de perfis ativos validos. Owner restrito e sujeito a RLS; sem parametros nem escrita.';
+
 reset role;
 revoke create on schema private from bpf_authz_reader;
 grant bpf_authz_reader to postgres with inherit false, set false;
 
 -- The helper no longer depends on the managed auth schema/function.
 revoke execute on function auth.uid() from bpf_authz_reader;
-
-comment on function private.empresa_leitura_usuarios() is
-  'Empresa autorizada para leitura administrativa: subject JWT, usuario ativo e ambas permissoes de perfis ativos validos. Owner restrito e sujeito a RLS; sem parametros nem escrita.';
 
 reset lock_timeout;
 reset statement_timeout;
