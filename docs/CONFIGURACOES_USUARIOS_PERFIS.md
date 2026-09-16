@@ -2,6 +2,8 @@
 
 Data: 15/09/2026. Estado: primeira versão de consulta; escrita administrativa não habilitada.
 
+Atualização de 16/09/2026: este documento preserva a inspeção e as evidências da primeira etapa. A evolução da leitura administrativa, correções da view/FK e validações estão em [Leitura administrativa de usuários](LEITURA_ADMINISTRATIVA_USUARIOS.md). A migration está preparada e validada localmente, mas **não foi aplicada ao Supabase remoto**: a revisão automática exigiu aprovação explícita. A mensagem da interface passou a informar o escopo da empresa e as permissões, sem prometer uma listagem completa. As limitações de banco abaixo ainda descrevem o ambiente remoto antes da aplicação.
+
 ## Escopo entregue
 
 `/configuracoes` contém navegação interna por `?secao=geral`, `?secao=usuarios` e `?secao=perfis`. Não foram adicionadas entradas ao menu lateral. A identidade visual existente foi preservada.

@@ -14,7 +14,7 @@ const context: MeuContexto = { usuario_id: userId, nome: 'Ana Qualidade', email:
 const baseUser = { id: userId, nome: 'Ana Qualidade', email: 'ana@example.test', empresa_id: companyId, unidade_id: unitId, status: 'ativo', ativo: true, created_at: '2026-09-15T12:00:00Z' }
 const profiles = ['Administrador', 'Responsável Técnico', 'Qualidade', 'Supervisor', 'Operador', 'Auditor', 'Consulta'].map((nome, index) => ({ id: index === 0 ? profileId : `profile-${index}`, empresa_id: null, nome, descricao: `Perfil ${nome}`, is_system: true, ativo: true }))
 
-async function setup(page: Page, permissions = allPermissions, options: { empty?: boolean; pending?: boolean; fail?: boolean; delay?: number } = {}) {
+async function setup(page: Page, permissions = allPermissions, options: { empty?: boolean; pending?: boolean; colleague?: boolean; fail?: boolean; delay?: number } = {}) {
   const errors: string[] = []
   const requests: { table: string; url: string; method: string }[] = []
   page.on('pageerror', error => errors.push(error.message))
@@ -32,7 +32,7 @@ async function setup(page: Page, permissions = allPermissions, options: { empty?
     if (table === 'usuarios' && options.fail) return route.fulfill({ status: 403, json: { message: 'Permission denied', code: '42501' } })
     const data: Record<string, unknown[]> = {
       v_meu_contexto: [current],
-      usuarios: options.empty ? [] : [baseUser, ...(options.pending ? [{ ...baseUser, id: 'pending-user', nome: 'João Pendente', email: 'joao@example.test', status: 'pendente', ativo: false, unidade_id: null }] : [])],
+      usuarios: options.empty ? [] : [baseUser, ...(options.colleague ? [{ ...baseUser, id: 'colleague-user', nome: 'Maria Qualidade', email: 'maria@example.test' }] : []), ...(options.pending ? [{ ...baseUser, id: 'pending-user', nome: 'João Pendente', email: 'joao@example.test', status: 'pendente', ativo: false, unidade_id: null }] : [])],
       empresas: [{ id: companyId, nome_fantasia: 'Empresa de teste', razao_social: 'Empresa de teste' }],
       unidades: [{ id: unitId, empresa_id: companyId, nome: 'Unidade Principal', ativo: true }],
       perfis: profiles,
@@ -47,12 +47,14 @@ async function setup(page: Page, permissions = allPermissions, options: { empty?
 }
 
 test('administrador mantém todos os módulos e navega por usuários e perfis', async ({ page }) => {
-  const result = await setup(page)
+  const result = await setup(page, allPermissions, { colleague: true })
   await page.goto('/configuracoes')
   await expect(page.getByRole('heading', { name: 'Configurações', exact: true })).toBeVisible()
   await expect(page.locator('.desktop-sidebar .nav-link')).toHaveCount(17)
   await page.getByRole('navigation', { name: 'Seções de configurações' }).getByRole('button', { name: 'Usuários', exact: true }).click()
-  await expect(page.getByText('Consulta limitada ao próprio cadastro.')).toBeVisible()
+  await expect(page.getByText('Consulta restrita à sua empresa.')).toBeVisible()
+  await expect(page.locator('.settings-user-card')).toHaveCount(2)
+  await expect(page.getByRole('button', { name: 'Ver detalhes de Maria Qualidade' })).toBeVisible()
   await page.getByRole('button', { name: 'Ver detalhes de Ana Qualidade' }).click()
   await expect(page.getByRole('dialog')).toBeVisible()
   await expect(page.getByRole('button', { name: 'Salvar alterações' })).toBeDisabled()
@@ -177,6 +179,27 @@ test('serviço nega contexto revogado antes de consultar tabelas administrativas
   expect(paths).toHaveLength(1)
   expect(paths[0]).toContain('v_meu_contexto')
 })
+
+for (const scenario of [
+  { name: 'empresa adulterada pelo cliente', scope: { usuarioId: userId, empresaId: '10000000-0000-0000-0000-000000000002' }, override: {} },
+  { name: 'identidade adulterada pelo cliente', scope: { usuarioId: '20000000-0000-0000-0000-000000000002', empresaId: companyId }, override: {} },
+  { name: 'status bloqueado', override: { status: 'bloqueado' as const } },
+  { name: 'status inativo', override: { status: 'inativo' as const } },
+  { name: 'cadastro inativo', override: { ativo: false } },
+  { name: 'sem configuracoes.visualizar', override: { permissoes: ['usuarios.gerenciar'] } },
+  { name: 'permissões revogadas por perfil inativo', override: { perfis: [], permissoes: [] } },
+]) {
+  test(`serviço recusa ${scenario.name} antes da leitura administrativa`, async () => {
+    const paths: string[] = []
+    const client = createClient('https://bpf-test.supabase.co', 'test-key', { auth: { persistSession: false }, global: { fetch: async input => {
+      paths.push(String(input))
+      return new Response(JSON.stringify([{ ...context, ...scenario.override }]), { headers: { 'content-type': 'application/json' } })
+    } } })
+    await expect(createConfiguracoesService(client).usuarios(scenario.scope ?? { usuarioId: userId, empresaId: companyId }, new AbortController().signal)).rejects.toThrow('não está mais disponível')
+    expect(paths).toHaveLength(1)
+    expect(paths[0]).toContain('v_meu_contexto')
+  })
+}
 
 test('serviço pagina respostas acima do limite do servidor', async () => {
   const permissions = Array.from({ length: 501 }, (_, i) => ({ id: `permission-${i}`, codigo: `modulo.acao_${i}`, modulo: 'modulo', acao: `acao_${i}`, descricao: null }))

@@ -19,7 +19,7 @@ export function UsuariosPanel() {
 
   return <>
     <div className="settings-section-heading"><div><h2>Usuários</h2><p>Consulte cadastros e seus vínculos de acesso.</p></div><button className="button secondary" onClick={() => { setSelectedId(null); query.reload() }}><RefreshCw size={15} />Atualizar</button></div>
-    <div className="settings-notice"><Info size={19} /><p><strong>Consulta limitada ao próprio cadastro.</strong> As regras atuais permitem visualizar apenas seu usuário e seus vínculos. Esta não é a listagem completa da empresa; outros usuários, inclusive pendentes, dependem da habilitação da leitura administrativa.</p></div>
+    <div className="settings-notice"><Info size={19} /><p><strong>Consulta restrita à sua empresa.</strong> Os registros disponíveis dependem das suas permissões de acesso. Cadastros sem empresa vinculada não aparecem nesta listagem. Alterações administrativas ainda não estão disponíveis.</p></div>
     <div className="settings-filters">
       <label>Nome ou e-mail<input type="search" value={filters.busca} onChange={event => setFilter('busca', event.target.value)} placeholder="Buscar usuário" /></label>
       <label>Status<select aria-label="Status" value={filters.status} onChange={event => setFilter('status', event.target.value)}><option value="">Todos os status</option>{Object.entries(statusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
