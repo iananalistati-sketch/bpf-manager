@@ -1,10 +1,11 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { hasPermission } from '../../../lib/permissions'
-import type { MeuContexto } from '../../../types/auth'
+import type { MeuContexto, UsuarioStatus } from '../../../types/auth'
 import type { Empresa, Perfil, PerfilPermissao, PerfisData, Permissao, ReadScope, Unidade, Usuario, UsuarioPerfil, UsuariosData } from '../types'
 
 const PAGE_SIZE = 500
 type Page<T> = { data: T[] | null; error: { message: string } | null; count: number | null }
+type PerfilAction = 'atribuir' | 'remover'
 
 async function readAll<T>(query: (from: number, to: number) => PromiseLike<Page<T>>, signal: AbortSignal): Promise<T[]> {
   const rows: T[] = []
@@ -20,8 +21,49 @@ async function readAll<T>(query: (from: number, to: number) => PromiseLike<Page<
   }
 }
 
-// Somente SELECT com o cliente autenticado; não existem métodos de escrita neste serviço.
-// Filtros de empresa reduzem o escopo, mas nunca substituem as políticas RLS.
+function validateUuid(value: string, label: string) {
+  if (!/^[0-9a-f-]{36}$/i.test(value)) throw new Error(`${label} inválido.`)
+}
+
+function validateJustification(value: string) {
+  if (value.trim().length < 5) throw new Error('Informe uma justificativa com pelo menos 5 caracteres.')
+}
+
+function mutationError(message?: string) {
+  const text = message ?? ''
+  const known = [
+    'Sem permissao para administrar usuarios',
+    'Sem permissao para gerir perfis de usuarios',
+    'Usuario pendente exige fluxo de vinculacao/aprovacao dedicado',
+    'Nao e permitido inativar ou bloquear o proprio usuario',
+    'Nao e permitido alterar o proprio perfil administrativo',
+    'Operacao removeria o ultimo administrador efetivo da empresa',
+    'Unidade invalida, inativa ou fora da empresa',
+    'Perfil fora do escopo autorizado',
+    'Perfil inativo nao pode ser atribuido',
+    'Perfil ja atribuido ao usuario',
+    'Perfil nao esta atribuido ao usuario',
+    'Nenhuma alteracao de status identificada',
+    'Nenhuma alteracao de unidade identificada',
+  ]
+  const matched = known.find(item => text.includes(item))
+  if (matched) return matched
+    .replace('Nao ', 'Não ')
+    .replace('nao ', 'não ')
+    .replace('Usuario', 'Usuário')
+    .replace('usuario', 'usuário')
+    .replace('permissao', 'permissão')
+    .replace('gestao', 'gestão')
+    .replace('vinculacao', 'vinculação')
+    .replace('aprovacao', 'aprovação')
+    .replace('Operacao', 'Operação')
+    .replace('removeria', 'removeria')
+    .replace('ultimo', 'último')
+    .replace('invalida', 'inválida')
+    .replace('atribuido', 'atribuído')
+  return 'Não foi possível concluir a alteração. Atualize os dados e tente novamente.'
+}
+
 export function createConfiguracoesService(client: SupabaseClient) {
   async function authorize(scope: ReadScope, permission: string, signal: AbortSignal) {
     const { data, error } = await client.from('v_meu_contexto').select('*')
@@ -31,7 +73,12 @@ export function createConfiguracoesService(client: SupabaseClient) {
       || !hasPermission(data, 'configuracoes.visualizar') || !hasPermission(data, permission)) {
       throw new Error('Seu acesso a esta área não está mais disponível. Atualize a sessão.')
     }
-    if (!/^[0-9a-f-]{36}$/i.test(scope.empresaId)) throw new Error('Empresa de acesso inválida.')
+    validateUuid(scope.empresaId, 'Empresa de acesso')
+  }
+
+  async function authorizeMutation(scope: ReadScope, permission: string) {
+    const controller = new AbortController()
+    await authorize(scope, permission, controller.signal)
   }
 
   const readProfiles = (scope: ReadScope, signal: AbortSignal) => readAll<Perfil>((from, to) => client
@@ -56,7 +103,6 @@ export function createConfiguracoesService(client: SupabaseClient) {
         readProfiles(scope, signal),
       ])
       const vinculos: UsuarioPerfil[] = []
-      // Lotes evitam URLs longas e a paginação evita truncar vínculos silenciosamente.
       for (let start = 0; start < usuarios.length; start += 100) {
         vinculos.push(...await readAll<UsuarioPerfil>((from, to) => client.from('usuario_perfis')
           .select('usuario_id,perfil_id', { count: 'exact' }).in('usuario_id', usuarios.slice(start, start + 100).map(user => user.id))
@@ -79,6 +125,35 @@ export function createConfiguracoesService(client: SupabaseClient) {
           .order('perfil_id').order('permissao_id').range(from, to).abortSignal(signal).returns<PerfilPermissao[]>(), signal))
       }
       return { perfis, permissoes, vinculos }
+    },
+    async alterarStatus(scope: ReadScope, usuarioId: string, status: Exclude<UsuarioStatus, 'pendente'>, justificativa: string) {
+      validateUuid(usuarioId, 'Usuário')
+      validateJustification(justificativa)
+      await authorizeMutation(scope, 'usuarios.gerenciar')
+      const { error } = await client.rpc('admin_usuario_alterar_status', {
+        p_usuario_id: usuarioId, p_status: status, p_justificativa: justificativa.trim(),
+      })
+      if (error) throw new Error(mutationError(error.message))
+    },
+    async alterarUnidade(scope: ReadScope, usuarioId: string, unidadeId: string | null, justificativa: string) {
+      validateUuid(usuarioId, 'Usuário')
+      if (unidadeId) validateUuid(unidadeId, 'Unidade')
+      validateJustification(justificativa)
+      await authorizeMutation(scope, 'usuarios.gerenciar')
+      const { error } = await client.rpc('admin_usuario_alterar_unidade', {
+        p_usuario_id: usuarioId, p_unidade_id: unidadeId, p_justificativa: justificativa.trim(),
+      })
+      if (error) throw new Error(mutationError(error.message))
+    },
+    async alterarPerfil(scope: ReadScope, usuarioId: string, perfilId: string, acao: PerfilAction, justificativa: string) {
+      validateUuid(usuarioId, 'Usuário')
+      validateUuid(perfilId, 'Perfil')
+      validateJustification(justificativa)
+      await authorizeMutation(scope, 'perfis.gerenciar')
+      const { error } = await client.rpc('admin_usuario_alterar_perfil', {
+        p_usuario_id: usuarioId, p_perfil_id: perfilId, p_acao: acao, p_justificativa: justificativa.trim(),
+      })
+      if (error) throw new Error(mutationError(error.message))
     },
   }
 }
