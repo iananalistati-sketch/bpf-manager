@@ -26,7 +26,7 @@ export function UsuariosPanel() {
 
   return <>
     <div className="settings-section-heading"><div><h2>Usuários</h2><p>Consulte cadastros, convide usuários e administre acessos autorizados.</p></div><div className="settings-heading-actions">{canInvite && <button className="button primary" onClick={() => setInviteOpen(true)}><MailPlus size={15} />Convidar usuário</button>}<button className="button secondary" onClick={() => { setSelectedId(null); query.reload() }}><RefreshCw size={15} />Atualizar</button></div></div>
-    <div className="settings-notice"><Info size={19} /><p><strong>Gestão restrita à sua empresa.</strong> Convites, alterações de status, unidade e perfil usam comandos protegidos no servidor e geram auditoria. Cadastros pendentes sem vínculo não são enumerados globalmente.</p></div>
+    <div className="settings-notice"><Info size={19} /><p><strong>Consulta restrita à sua empresa.</strong> Convites, alterações de status, unidade e perfil usam comandos protegidos no servidor e geram auditoria. Cadastros pendentes sem vínculo não são enumerados globalmente.</p></div>
     <div className="settings-filters">
       <label>Nome ou e-mail<input type="search" value={filters.busca} onChange={event => setFilter('busca', event.target.value)} placeholder="Buscar usuário" /></label>
       <label>Status<select aria-label="Status" value={filters.status} onChange={event => setFilter('status', event.target.value)}><option value="">Todos os status</option>{Object.entries(statusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
