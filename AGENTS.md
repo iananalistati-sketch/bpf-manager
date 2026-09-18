@@ -15,17 +15,25 @@ Antes de propor, editar ou revisar qualquer implementação relevante, consulte:
 
 Nenhuma implementação deve contrariar silenciosamente a referência do projeto. Se uma demanda exigir mudança de direção, a divergência deve ser explicitada e a documentação deve ser atualizada no mesmo ciclo da mudança.
 
+## Modelo de trabalho
+
+Os agentes especializados atuam de forma consultiva. Eles analisam sua área, levantam riscos e sugerem soluções. O Orquestrador/Tech Lead integra essas recomendações, resolve conflitos entre elas e é responsável por definir e implementar a estrutura final coerente.
+
+Antes de solicitar um checkpoint local ao usuário, o Agente 07 — Validação de Fontes / Revisão Integrada deve revisar o conjunto já implementado, especialmente migrations encadeadas, grants/RLS, contratos frontend-backend e testes potencialmente obsoletos.
+
 ## Fluxo recomendado
 
 1. Entender a demanda.
 2. Identificar os agentes especialistas envolvidos.
 3. Validar aderência ao objetivo do BPF Manager.
 4. Definir critérios de aceite.
-5. Revisar impactos em dados, segurança, permissões, auditoria e UX.
-6. Implementar a menor mudança coerente possível.
-7. Executar build/testes aplicáveis.
-8. Revisar a alteração sob a ótica de segurança e rastreabilidade.
-9. Atualizar documentação quando a decisão alterar comportamento, arquitetura ou escopo.
+5. Coletar recomendações de produto, dados, segurança, frontend, QA e governança aplicáveis.
+6. O Orquestrador consolida as recomendações e implementa a menor mudança coerente possível.
+7. Executar revisão integrada de fontes com o Agente 07.
+8. Corrigir bloqueadores encontrados antes do checkpoint local.
+9. Executar build/testes aplicáveis.
+10. Revisar a alteração sob a ótica de segurança e rastreabilidade.
+11. Atualizar documentação quando a decisão alterar comportamento, arquitetura ou escopo.
 
 ## Agentes especializados
 
@@ -36,6 +44,7 @@ Nenhuma implementação deve contrariar silenciosamente a referência do projeto
 - `docs/agentes/04-FRONTEND-UX.md`
 - `docs/agentes/05-QA.md`
 - `docs/agentes/06-AUDITORIA-GOVERNANCA.md`
+- `docs/agentes/07-VALIDACAO-FONTES.md`
 
 ## Regras globais
 
