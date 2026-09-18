@@ -1,26 +1,32 @@
 import { useState } from 'react'
-import { Eye, Info, RefreshCw } from 'lucide-react'
+import { Eye, Info, MailPlus, RefreshCw } from 'lucide-react'
+import { useAuth } from '../../../hooks/useAuth'
+import { hasPermission } from '../../../lib/permissions'
 import { useUsuarios } from '../hooks/useConfiguracoesQuery'
 import { displayDate, emptyFilters, filterUsuarios, statusLabels } from '../lib/presentation'
+import { InviteUsuarioDialog } from './InviteUsuarioDialog'
 import { QueryFeedback } from './QueryFeedback'
 import { StatusBadge } from './StatusBadge'
 import { UsuarioDetails } from './UsuarioDetails'
 
 export function UsuariosPanel() {
+  const { contexto } = useAuth()
   const query = useUsuarios()
   const [filters, setFilters] = useState(emptyFilters)
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [inviteOpen, setInviteOpen] = useState(false)
   const data = query.data
   if (!query.allowed) return <QueryFeedback error="Você não possui acesso à área de usuários." />
   if (query.loading || query.error || !data) return <QueryFeedback loading={query.loading} error={query.error} onRetry={query.reload} />
   const users = filterUsuarios(data.usuarios, data.vinculos, filters)
   const selected = data.usuarios.find(user => user.id === selectedId)
+  const canInvite = hasPermission(contexto, 'usuarios.convidar')
   const setFilter = (name: keyof typeof filters, value: string) => setFilters(previous => ({ ...previous, [name]: value }))
   const refreshAfterChange = () => { setSelectedId(null); query.reload() }
 
   return <>
-    <div className="settings-section-heading"><div><h2>Usuários</h2><p>Consulte cadastros e administre acessos autorizados.</p></div><button className="button secondary" onClick={() => { setSelectedId(null); query.reload() }}><RefreshCw size={15} />Atualizar</button></div>
-    <div className="settings-notice"><Info size={19} /><p><strong>Gestão restrita à sua empresa.</strong> Os registros disponíveis dependem das suas permissões. Alterações de status, unidade e perfil usam comandos protegidos no servidor e geram auditoria. Usuários pendentes permanecem fora deste fluxo.</p></div>
+    <div className="settings-section-heading"><div><h2>Usuários</h2><p>Consulte cadastros, convide usuários e administre acessos autorizados.</p></div><div className="settings-heading-actions">{canInvite && <button className="button primary" onClick={() => setInviteOpen(true)}><MailPlus size={15} />Convidar usuário</button>}<button className="button secondary" onClick={() => { setSelectedId(null); query.reload() }}><RefreshCw size={15} />Atualizar</button></div></div>
+    <div className="settings-notice"><Info size={19} /><p><strong>Gestão restrita à sua empresa.</strong> Convites, alterações de status, unidade e perfil usam comandos protegidos no servidor e geram auditoria. Cadastros pendentes sem vínculo não são enumerados globalmente.</p></div>
     <div className="settings-filters">
       <label>Nome ou e-mail<input type="search" value={filters.busca} onChange={event => setFilter('busca', event.target.value)} placeholder="Buscar usuário" /></label>
       <label>Status<select aria-label="Status" value={filters.status} onChange={event => setFilter('status', event.target.value)}><option value="">Todos os status</option>{Object.entries(statusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
@@ -42,5 +48,6 @@ export function UsuariosPanel() {
       })}
     </div>}
     {selected && <UsuarioDetails usuario={selected} data={data} onClose={() => setSelectedId(null)} onChanged={refreshAfterChange} />}
+    {inviteOpen && <InviteUsuarioDialog data={data} onClose={() => setInviteOpen(false)} onChanged={() => query.reload()} />}
   </>
 }
