@@ -1,10 +1,10 @@
 # Administração de usuários — escrita segura e auditoria
 
-Data: 18/09/2026. Estado: backend validado localmente e aplicado no Supabase remoto.
+Data: 18/09/2026. Estado: backend validado e aplicado no Supabase remoto; integração frontend preparada no GitHub e aguardando validação local.
 
 ## 1. Decisão do Orquestrador
 
-A escrita administrativa será liberada em etapas. Primeiro entram comandos transacionais seguros no banco com auditoria atômica; somente depois o frontend habilitará ações de edição.
+A escrita administrativa foi liberada em etapas. Primeiro entraram comandos transacionais seguros no banco com auditoria atômica; depois o frontend passou a consumir exclusivamente essas RPCs, sem escrita direta nas tabelas.
 
 A etapa atual cobre usuários já vinculados a uma empresa. O fluxo de aprovação de usuários `pendente` permanece fora do escopo porque exige uma origem segura para o vínculo (convite ou solicitação) e não deve ser improvisado por enumeração global de cadastros sem empresa.
 
@@ -13,8 +13,8 @@ A etapa atual cobre usuários já vinculados a uma empresa. O fluxo de aprovaç�
 - **Dados / Supabase:** tabela de auditoria append-only, funções privadas, roles restritas, RLS e integridade organizacional.
 - **Segurança / Permissões:** autorização derivada da sessão, nenhuma empresa informada pelo cliente, sem escrita direta em tabelas, prevenção de autoelevação e proteção do último administrador efetivo.
 - **Auditoria / Governança:** toda alteração bem-sucedida registra ator, empresa/unidade, ação, alvo, antes/depois, justificativa e horário do servidor na mesma transação.
-- **QA:** testes de empresa A/B, self-elevation, último administrador, status, unidade, perfil, usuário pendente e bloqueio de escrita direta.
-- **Frontend / UX:** não participou desta primeira subetapa; a interface permanece somente leitura até a integração dos comandos RPC.
+- **Frontend / UX:** formulário administrativo integrado ao detalhe do usuário, mantendo identidade visual, bloqueios visuais coerentes e justificativas explícitas.
+- **QA:** testes de empresa A/B, self-elevation, último administrador, status, unidade, perfil, usuário pendente, bloqueio de escrita direta e chamada RPC pelo frontend.
 
 ## 3. Escopo implementado
 
@@ -23,19 +23,30 @@ Migrations:
 - `supabase/migrations/20260918112000_admin_user_commands.sql`;
 - `supabase/migrations/20260918120500_fix_admin_writer_select_grants.sql`.
 
-Estruturas implementadas:
+Backend:
 
 - `public.auditoria_eventos` com RLS e sem leitura/escrita direta por `authenticated`;
 - role `bpf_admin_writer`, sem login, sem superuser e sem `BYPASSRLS`;
 - `private.empresa_gestao_perfis()` para exigir `configuracoes.visualizar`, `usuarios.gerenciar` e `perfis.gerenciar`;
 - funções privadas de escrita pertencentes à role restrita;
-- wrappers públicos `SECURITY INVOKER` para uso futuro via `supabase.rpc()`.
+- wrappers públicos `SECURITY INVOKER` usados via `supabase.rpc()`.
 
-Comandos disponíveis:
+Frontend preparado:
 
-- `admin_usuario_alterar_status` — ativo, inativo e bloqueado;
-- `admin_usuario_alterar_unidade` — somente unidade ativa da mesma empresa ou `NULL`;
-- `admin_usuario_alterar_perfil` — atribuir/remover perfil compatível, exigindo permissão adicional de gestão de perfis.
+- `Configuracões → Usuários → Detalhes` passa a oferecer administração para usuários não pendentes;
+- alteração de status com justificativa obrigatória e confirmação para inativação/bloqueio;
+- alteração de unidade com confirmação e seleção limitada às unidades retornadas da própria empresa;
+- atribuição/remoção de perfil somente para quem possui `perfis.gerenciar`;
+- bloqueio visual de auto-inativação/auto-bloqueio e de alteração dos próprios perfis;
+- mensagens de erro provenientes do backend exibidas no diálogo;
+- listagem recarregada após uma operação bem-sucedida;
+- usuário `pendente` continua exclusivamente em modo de consulta.
+
+Comandos consumidos:
+
+- `admin_usuario_alterar_status`;
+- `admin_usuario_alterar_unidade`;
+- `admin_usuario_alterar_perfil`.
 
 ## 4. Barreiras de segurança
 
@@ -49,7 +60,8 @@ Comandos disponíveis:
 - alterações de perfil exigem `perfis.gerenciar` além de `usuarios.gerenciar`;
 - a operação não pode remover o último administrador efetivo da empresa;
 - `authenticated` continua sem `UPDATE` direto em `usuarios` e sem `INSERT/DELETE` direto em `usuario_perfis`;
-- a tabela de auditoria não é acessível diretamente pelo cliente nesta etapa.
+- a tabela de auditoria não é acessível diretamente pelo cliente nesta etapa;
+- o frontend revalida o contexto antes de chamar a RPC, mas essa validação é defesa adicional e não substitui o servidor.
 
 ## 5. Administrador efetivo
 
@@ -84,18 +96,18 @@ Se a auditoria falhar, a alteração inteira falha.
 - convite por e-mail;
 - solicitação de vínculo;
 - transferência de usuário entre empresas;
-- edição de permissões de perfil;
+- edição das permissões internas de um perfil;
 - leitura da trilha de auditoria pela interface;
-- botões/formulários de escrita no frontend.
+- feedback persistente fora do diálogo após a atualização da listagem.
 
-## 8. Validação local concluída
+## 8. Validação do backend concluída
 
 Em 18/09/2026:
 
 - `npm.cmd run test:db`: aprovado; todas as migrations aplicadas no PostgreSQL efêmero, leitura administrativa preservada, comandos auditados aprovados, isolamento multiempresa, anti-self-elevation, proteção do último administrador e ausência de escrita direta confirmados;
 - `npm.cmd run build`: aprovado; permanece apenas o aviso não bloqueante de chunk principal acima de 500 kB;
 - `npm.cmd run lint`: aprovado;
-- `npm.cmd run test:e2e`: **21/21 aprovados**.
+- `npm.cmd run test:e2e`: **21/21 aprovados** antes da integração frontend de escrita.
 
 A fixture local foi alinhada ao schema remoto durante a validação, e a migration complementar `fix_admin_writer_select_grants` preserva o princípio de menor privilégio ao liberar apenas as colunas necessárias aos `%ROWTYPE` internos.
 
@@ -115,16 +127,19 @@ Validações pós-migration confirmaram:
 - teste remoto transacional de auto-bloqueio foi recusado e não gerou auditoria residual;
 - histórico remoto registra `admin_user_commands` e `fix_admin_writer_select_grants`.
 
-O advisor de segurança não apontou nova vulnerabilidade desta etapa; permanece o aviso já conhecido de proteção contra senhas vazadas desabilitada. Os advisors de performance apontaram FKs sem índices de cobertura e oportunidades de otimização de initplan em RLS; esses itens serão tratados separadamente para não misturar otimização com a fundação funcional.
+O advisor de segurança não apontou nova vulnerabilidade desta etapa; permanece o aviso já conhecido de proteção contra senhas vazadas desabilitada. Os advisors de performance apontaram FKs sem índices de cobertura e oportunidades de otimização de initplan em RLS; esses itens serão tratados separadamente.
 
-## 10. Próxima subetapa
+## 10. Validação pendente da integração frontend
 
-Conectar os comandos validados à tela `Configurações → Usuários`, com:
+Após sincronizar o branch, executar:
 
-- formulários explícitos;
-- justificativa obrigatória;
-- confirmação de ações sensíveis;
-- feedback de sucesso/erro;
-- atualização da listagem após a operação;
-- atualização do contexto quando mudanças afetarem acesso;
-- testes E2E específicos das novas ações.
+1. `npm.cmd run build`;
+2. `npm.cmd run lint`;
+3. `npm.cmd run test:e2e`;
+4. teste manual em `Configurações → Usuários` com um segundo usuário da mesma empresa, quando disponível.
+
+Critérios manuais: justificativa menor que 5 caracteres não habilita ações; auto-bloqueio permanece indisponível; usuário pendente não oferece comandos administrativos; após uma alteração válida a listagem é recarregada; erros retornados pelo backend devem aparecer sem tela branca.
+
+## 11. Próxima subetapa após aprovação
+
+Com a interface administrativa validada, o próximo desenho será o fluxo seguro de onboarding de usuários pendentes: convite/solicitação, vínculo organizacional e aprovação sem enumeração global de cadastros.
