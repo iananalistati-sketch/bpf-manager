@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import { History, RefreshCw, Search } from 'lucide-react'
 import { useAuditoria } from '../hooks/useConfiguracoesQuery'
 import { QueryFeedback } from './QueryFeedback'
@@ -20,12 +20,12 @@ export function AuditoriaPanel() {
   if (query.loading || query.error || !query.data) return <QueryFeedback loading={query.loading} error={query.error} onRetry={query.reload} />
   const { eventos, usuarios } = query.data
   const entities = [...new Set(eventos.map(item => item.entidade))].sort()
-  const filtered = useMemo(() => eventos.filter(item => {
+  const filtered = eventos.filter(item => {
     if (entity && item.entidade !== entity) return false
     const actor = usuarios.find(user => user.id === item.ator_id)
     const haystack = [item.acao, item.entidade, item.justificativa, actor?.nome, actor?.email, item.registro_id].filter(Boolean).join(' ').toLocaleLowerCase('pt-BR')
     return haystack.includes(search.trim().toLocaleLowerCase('pt-BR'))
-  }), [entity, eventos, search, usuarios])
+  })
   return <>
     <div className="settings-section-heading"><div><h2>Auditoria</h2><p>Histórico das alterações administrativas registradas na sua empresa.</p></div><button className="button secondary" onClick={query.reload}><RefreshCw size={15} />Atualizar</button></div>
     <p className="settings-notice"><History size={19} /><span><strong>Trilha imutável para o cliente.</strong> Esta tela é somente leitura e o banco limita os eventos à empresa do usuário autenticado.</span></p>
