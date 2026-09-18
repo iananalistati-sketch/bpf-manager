@@ -162,10 +162,14 @@ DO $$ BEGIN
 END $$;
 
 RESET ROLE;
--- Direct client writes and audit reads remain unavailable; only RPC execution is exposed.
+-- Direct client writes remain unavailable. Audit SELECT now exists by design, but RLS requires auditoria.visualizar.
 SELECT pg_temp.cmd_assert(NOT has_table_privilege('authenticated', 'public.usuarios', 'UPDATE'), 'authenticated still has no direct user UPDATE');
 SELECT pg_temp.cmd_assert(NOT has_table_privilege('authenticated', 'public.usuario_perfis', 'INSERT,DELETE'), 'authenticated still has no direct profile-link writes');
-SELECT pg_temp.cmd_assert(NOT has_table_privilege('authenticated', 'public.auditoria_eventos', 'SELECT,INSERT,UPDATE,DELETE'), 'audit table inaccessible directly');
+SELECT pg_temp.cmd_assert(has_table_privilege('authenticated', 'public.auditoria_eventos', 'SELECT'), 'audit SELECT grant exists for RLS-scoped read');
+SET LOCAL ROLE authenticated;
+SELECT pg_temp.cmd_assert((SELECT count(*) = 0 FROM public.auditoria_eventos), 'manager without auditoria.visualizar sees no audit rows');
+RESET ROLE;
+SELECT pg_temp.cmd_assert(NOT has_table_privilege('authenticated', 'public.auditoria_eventos', 'INSERT,UPDATE,DELETE'), 'audit writes remain inaccessible directly');
 SELECT pg_temp.cmd_assert(has_function_privilege('authenticated', 'public.admin_usuario_alterar_status(uuid,text,text)', 'EXECUTE'), 'authenticated can execute status command');
 SELECT pg_temp.cmd_assert(NOT has_function_privilege('anon', 'public.admin_usuario_alterar_status(uuid,text,text)', 'EXECUTE'), 'anon cannot execute status command');
 SELECT pg_temp.cmd_assert((SELECT count(*) >= 5 FROM public.auditoria_eventos), 'successful commands generated audit trail');
