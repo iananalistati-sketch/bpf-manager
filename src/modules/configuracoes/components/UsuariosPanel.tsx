@@ -16,10 +16,11 @@ export function UsuariosPanel() {
   const users = filterUsuarios(data.usuarios, data.vinculos, filters)
   const selected = data.usuarios.find(user => user.id === selectedId)
   const setFilter = (name: keyof typeof filters, value: string) => setFilters(previous => ({ ...previous, [name]: value }))
+  const refreshAfterChange = () => { setSelectedId(null); query.reload() }
 
   return <>
-    <div className="settings-section-heading"><div><h2>Usuários</h2><p>Consulte cadastros e seus vínculos de acesso.</p></div><button className="button secondary" onClick={() => { setSelectedId(null); query.reload() }}><RefreshCw size={15} />Atualizar</button></div>
-    <div className="settings-notice"><Info size={19} /><p><strong>Consulta restrita à sua empresa.</strong> Os registros disponíveis dependem das suas permissões de acesso. Cadastros sem empresa vinculada não aparecem nesta listagem. Alterações administrativas ainda não estão disponíveis.</p></div>
+    <div className="settings-section-heading"><div><h2>Usuários</h2><p>Consulte cadastros e administre acessos autorizados.</p></div><button className="button secondary" onClick={() => { setSelectedId(null); query.reload() }}><RefreshCw size={15} />Atualizar</button></div>
+    <div className="settings-notice"><Info size={19} /><p><strong>Gestão restrita à sua empresa.</strong> Os registros disponíveis dependem das suas permissões. Alterações de status, unidade e perfil usam comandos protegidos no servidor e geram auditoria. Usuários pendentes permanecem fora deste fluxo.</p></div>
     <div className="settings-filters">
       <label>Nome ou e-mail<input type="search" value={filters.busca} onChange={event => setFilter('busca', event.target.value)} placeholder="Buscar usuário" /></label>
       <label>Status<select aria-label="Status" value={filters.status} onChange={event => setFilter('status', event.target.value)}><option value="">Todos os status</option>{Object.entries(statusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
@@ -40,6 +41,6 @@ export function UsuariosPanel() {
         </article>
       })}
     </div>}
-    {selected && <UsuarioDetails usuario={selected} data={data} onClose={() => setSelectedId(null)} />}
+    {selected && <UsuarioDetails usuario={selected} data={data} onClose={() => setSelectedId(null)} onChanged={refreshAfterChange} />}
   </>
 }
