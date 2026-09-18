@@ -14,10 +14,14 @@ grant update (unidade_id) on public.setores to bpf_admin_writer;
 
 -- Structure administration must not implicitly require usuarios.gerenciar merely to read its
 -- own units or to verify whether a unit still has active users before deactivation.
+-- Drop/recreate makes this corrective migration safe against a partially prepared test/schema
+-- state while preserving the exact final policy definition expected by the project.
+drop policy if exists unidades_admin_writer_structure_select on public.unidades;
 create policy unidades_admin_writer_structure_select on public.unidades
   for select to bpf_admin_writer
   using (empresa_id = (select private.empresa_estrutura_admin()));
 
+drop policy if exists usuarios_admin_writer_structure_select on public.usuarios;
 create policy usuarios_admin_writer_structure_select on public.usuarios
   for select to bpf_admin_writer
   using (empresa_id = (select private.empresa_estrutura_admin()));
