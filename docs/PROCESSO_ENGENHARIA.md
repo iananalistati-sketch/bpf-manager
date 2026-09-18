@@ -81,7 +81,7 @@ Agente 09 tentou bypass, cross-tenant, autoelevação e chamadas diretas de back
 Agente 07 revisou contratos entre banco, frontend, testes e documentação e confirmou ausência de bloqueadores conhecidos.
 
 ### Gate 6 — QA automatizado
-`validate:db`, `test:db`, `build`, `lint` e `test:e2e` aplicáveis passaram.
+O comando unificado `npm.cmd run validate` deve passar. Ele executa, em sequência, `test:db`, `build`, `lint` e `test:e2e`. O `test:db` já inclui o preflight `validate:db-sources` antes dos testes funcionais de banco.
 
 ### Gate 7 — Checkpoint do usuário
 Somente após os gates anteriores o usuário recebe comandos de validação local/visual.
@@ -122,5 +122,5 @@ Uma implantação só é considerada pronta quando:
 - estado acumulado das migrations é coerente;
 - testes antigos foram revisados contra o comportamento novo;
 - não existem bloqueadores dos agentes 07, 08 ou 09;
-- os testes automatizados aplicáveis passaram;
+- o comando unificado de validação passou;
 - documentação está atualizada.
