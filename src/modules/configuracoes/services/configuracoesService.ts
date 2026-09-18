@@ -42,6 +42,9 @@ function mutationError(message?: string) {
     'Usuario pendente exige fluxo de vinculacao/aprovacao dedicado',
     'Nao e permitido inativar ou bloquear o proprio usuario',
     'Nao e permitido alterar o proprio perfil administrativo',
+    'Nao e permitido delegar um perfil com permissoes superiores as do ator',
+    'Nao e permitido conceder uma permissao que o ator nao possui',
+    'Perfil em uso por usuarios ativos deve ser desvinculado antes de alterar permissoes',
     'Operacao removeria o ultimo administrador efetivo da empresa',
     'Unidade invalida, inativa ou fora da empresa', 'Unidade possui usuarios ativos vinculados',
     'Unidade nao encontrada no escopo autorizado', 'Setor nao encontrado no escopo autorizado',
@@ -56,10 +59,10 @@ function mutationError(message?: string) {
   if (!matched) return 'Não foi possível concluir a alteração. Atualize os dados e tente novamente.'
   return matched
     .replaceAll('Nao', 'Não').replaceAll('nao', 'não').replaceAll('Usuario', 'Usuário').replaceAll('usuarios', 'usuários')
-    .replaceAll('usuario', 'usuário').replaceAll('permissao', 'permissão').replaceAll('Permissao', 'Permissão')
+    .replaceAll('usuario', 'usuário').replaceAll('permissoes', 'permissões').replaceAll('permissao', 'permissão').replaceAll('Permissao', 'Permissão')
     .replaceAll('gestao', 'gestão').replaceAll('vinculacao', 'vinculação').replaceAll('aprovacao', 'aprovação')
     .replaceAll('Operacao', 'Operação').replaceAll('ultimo', 'último').replaceAll('invalida', 'inválida')
-    .replaceAll('atribuido', 'atribuído').replaceAll('Razao', 'Razão').replaceAll('convite', 'convite')
+    .replaceAll('atribuido', 'atribuído').replaceAll('Razao', 'Razão')
 }
 
 export function createConfiguracoesService(client: SupabaseClient) {
