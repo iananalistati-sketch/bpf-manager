@@ -8,6 +8,11 @@ GRANT SELECT ON qa_structure_ids TO authenticated;
 CREATE FUNCTION pg_temp.stid(k text) RETURNS uuid LANGUAGE sql STABLE AS $$ SELECT id FROM pg_temp.qa_structure_ids WHERE name=k $$;
 CREATE FUNCTION pg_temp.stassert(ok boolean,label text) RETURNS void LANGUAGE plpgsql AS $$ BEGIN IF ok IS DISTINCT FROM true THEN RAISE EXCEPTION 'QA structure failed: %',label; END IF; END $$;
 
+-- Temporary result holders are always owned by the deployer. Client roles receive only the
+-- minimum grants needed to write/read results while exercising RPCs under SET ROLE.
+CREATE TEMP TABLE qa_structure_sector(id uuid PRIMARY KEY);
+GRANT SELECT, INSERT, DELETE ON qa_structure_sector TO authenticated;
+
 INSERT INTO public.empresas(id,razao_social) VALUES(pg_temp.stid('company'),'QA Structure');
 INSERT INTO public.unidades(id,empresa_id,nome,codigo) VALUES
  (pg_temp.stid('unit_a'),pg_temp.stid('company'),'Unidade A','UA'),
@@ -25,9 +30,10 @@ SET LOCAL ROLE authenticated;
 
 -- Must work without usuarios.gerenciar: update uses a full unidade row snapshot for audit.
 SELECT public.admin_unidade_salvar(pg_temp.stid('unit_b'),'Unidade B Editada','UB2',true,'QA edita unidade');
-SELECT public.admin_setor_salvar(null,pg_temp.stid('unit_a'),'Qualidade','QLD',true,'QA cria setor') AS id INTO TEMP TABLE qa_structure_sector;
+DELETE FROM qa_structure_sector;
+INSERT INTO qa_structure_sector(id)
+SELECT public.admin_setor_salvar(null,pg_temp.stid('unit_a'),'Qualidade','QLD',true,'QA cria setor');
 RESET ROLE;
-GRANT SELECT ON qa_structure_sector TO authenticated;
 SELECT pg_temp.stassert((SELECT nome='Unidade B Editada' AND codigo='UB2' FROM public.unidades WHERE id=pg_temp.stid('unit_b')),'unit update works for structure-only actor');
 
 SET LOCAL ROLE authenticated;
