@@ -162,18 +162,23 @@ Fases previstas:
 - Agente 09 — Segurança Adversarial;
 - Agente 10 — SaaS/Trial/Planos/Provisionamento.
 
+## Gate 1 — Arquitetura
+
+Concluído em 18/09/2026 e registrado em `docs/arquitetura/DECISAO-MARCO-01-5-TENANCY-SAAS.md`.
+
+A implementação foi dividida em cinco fases. A primeira é **Membership compatibility**, criando `usuario_empresas` e `usuario_empresa_perfis`, realizando backfill seguro e mantendo os contratos do Marco 1 operacionais.
+
 ## Próximo passo de implementação
 
-Antes de escrever migrations, o Gate 1 deve produzir uma decisão arquitetural consolidada para:
+Iniciar a **Fase 1 — Membership compatibility**:
 
-- schema de identidade/membership;
-- tenant ativo;
-- migração do RBAC existente;
-- catálogo de planos e entitlements;
-- lifecycle de trial/assinatura;
-- estratégia de compatibilidade com o Marco 1 remoto.
+- desenhar migration aditiva;
+- criar backfill idempotente a partir de `usuarios` e `usuario_perfis`;
+- criar constraints e RLS sem trocar ainda a fonte principal de autorização;
+- criar testes de consistência e isolamento;
+- revisar estado acumulado com Agentes 08 e 09 antes de qualquer deploy.
 
 ---
 
-**Status:** Planejado / próximo marco  
+**Status:** Gate 1 concluído / Fase 1 pronta para implementação  
 **Data:** 18/09/2026
