@@ -20,35 +20,69 @@ CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS $$
 $$;
 GRANT USAGE ON SCHEMA public, auth TO authenticated;
 CREATE TABLE public.empresas (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(), razao_social text NOT NULL,
-  nome_fantasia text, ativo boolean NOT NULL DEFAULT true
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  razao_social text NOT NULL,
+  nome_fantasia text,
+  cnpj text,
+  ativo boolean NOT NULL DEFAULT true,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  created_by uuid
 );
 CREATE TABLE public.unidades (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(), empresa_id uuid NOT NULL REFERENCES public.empresas,
-  nome text NOT NULL, ativo boolean NOT NULL DEFAULT true
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  empresa_id uuid NOT NULL REFERENCES public.empresas,
+  nome text NOT NULL,
+  codigo text,
+  ativo boolean NOT NULL DEFAULT true,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  created_by uuid
 );
 CREATE TABLE public.usuarios (
-  id uuid PRIMARY KEY REFERENCES auth.users ON DELETE CASCADE, nome text, email text,
-  empresa_id uuid REFERENCES public.empresas, unidade_id uuid REFERENCES public.unidades ON DELETE SET NULL,
-  ativo boolean NOT NULL DEFAULT true, status text NOT NULL DEFAULT 'pendente'
+  id uuid PRIMARY KEY REFERENCES auth.users ON DELETE CASCADE,
+  nome text,
+  email text,
+  empresa_id uuid REFERENCES public.empresas,
+  unidade_id uuid REFERENCES public.unidades ON DELETE SET NULL,
+  ativo boolean NOT NULL DEFAULT true,
+  status text NOT NULL DEFAULT 'pendente'
     CHECK (status IN ('pendente', 'ativo', 'inativo', 'bloqueado')),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
   CHECK (unidade_id IS NULL OR empresa_id IS NOT NULL)
 );
 CREATE TABLE public.perfis (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(), empresa_id uuid REFERENCES public.empresas,
-  nome text NOT NULL, is_system boolean NOT NULL DEFAULT false, ativo boolean NOT NULL DEFAULT true
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  empresa_id uuid REFERENCES public.empresas,
+  nome text NOT NULL,
+  descricao text,
+  is_system boolean NOT NULL DEFAULT false,
+  ativo boolean NOT NULL DEFAULT true,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  created_by uuid
 );
 CREATE TABLE public.permissoes (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(), codigo text NOT NULL UNIQUE
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  codigo text NOT NULL UNIQUE,
+  modulo text NOT NULL,
+  acao text NOT NULL,
+  descricao text,
+  created_at timestamptz NOT NULL DEFAULT now()
 );
 CREATE TABLE public.usuario_perfis (
   usuario_id uuid REFERENCES public.usuarios ON DELETE CASCADE,
   perfil_id uuid REFERENCES public.perfis ON DELETE CASCADE,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  created_by uuid,
   PRIMARY KEY (usuario_id, perfil_id)
 );
 CREATE TABLE public.perfil_permissoes (
   perfil_id uuid REFERENCES public.perfis ON DELETE CASCADE,
   permissao_id uuid REFERENCES public.permissoes ON DELETE CASCADE,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  created_by uuid,
   PRIMARY KEY (perfil_id, permissao_id)
 );
 CREATE FUNCTION private.handle_new_auth_user() RETURNS trigger LANGUAGE plpgsql
@@ -99,4 +133,8 @@ LEFT JOIN public.permissoes pm ON pm.id = pp.permissao_id
 WHERE u.id = (SELECT auth.uid())
 GROUP BY u.id, e.nome_fantasia, e.razao_social, un.nome;
 GRANT ALL ON public.v_meu_contexto TO authenticated;
-INSERT INTO public.permissoes(codigo) VALUES ('configuracoes.visualizar'), ('usuarios.gerenciar');
+INSERT INTO public.permissoes(codigo, modulo, acao) VALUES
+  ('configuracoes.visualizar', 'configuracoes', 'visualizar'),
+  ('configuracoes.gerenciar', 'configuracoes', 'gerenciar'),
+  ('usuarios.gerenciar', 'usuarios', 'gerenciar'),
+  ('perfis.gerenciar', 'perfis', 'gerenciar');
