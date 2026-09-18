@@ -82,8 +82,15 @@ create role bpf_admin_writer
   nologin noinherit nosuperuser nocreatedb nocreaterole noreplication nobypassrls;
 grant bpf_admin_writer to postgres with inherit false, set true;
 grant usage on schema public, private to bpf_admin_writer;
+
+-- The authorization helpers are owned by bpf_authz_reader. PostgreSQL must temporarily
+-- SET ROLE to that owner to grant EXECUTE; postgres deliberately has no inherited rights.
+grant bpf_authz_reader to postgres with inherit false, set true;
+set role bpf_authz_reader;
 grant execute on function private.empresa_leitura_usuarios() to bpf_admin_writer;
 grant execute on function private.empresa_gestao_perfis() to bpf_admin_writer;
+reset role;
+grant bpf_authz_reader to postgres with inherit false, set false;
 
 grant select (id, empresa_id, unidade_id, ativo, status, nome, email, updated_at)
   on public.usuarios to bpf_admin_writer;
