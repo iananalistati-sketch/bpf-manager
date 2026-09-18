@@ -10,11 +10,13 @@ const migrations = [
   'supabase/migrations/20260918120500_fix_admin_writer_select_grants.sql',
   'supabase/migrations/20260918134500_complete_administration_foundation.sql',
   'supabase/migrations/20260918134600_expand_admin_audit_writer_policy.sql',
+  'supabase/migrations/20260918134700_harden_profile_delegation.sql',
 ]
 const testSuites = [
   'supabase/tests/administrative_user_read.sql',
   'supabase/tests/admin_user_commands.sql',
   'supabase/tests/complete_administration_foundation.sql',
+  'supabase/tests/profile_delegation_security.sql',
 ]
 
 const db = await PGlite.create()
