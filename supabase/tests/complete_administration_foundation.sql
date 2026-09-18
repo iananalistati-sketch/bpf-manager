@@ -27,6 +27,11 @@ SELECT pg_temp.aid('profile_admin'),id FROM public.permissoes
 WHERE codigo IN ('configuracoes.visualizar','configuracoes.gerenciar','usuarios.gerenciar','perfis.gerenciar','usuarios.convidar','estrutura.gerenciar','auditoria.visualizar');
 INSERT INTO public.usuario_perfis(usuario_id,perfil_id) VALUES(pg_temp.aid('actor'),pg_temp.aid('profile_admin'));
 
+-- Temporary result holders are created by the deployer before SET ROLE so both
+-- the deployer and authenticated test role can use them without ownership surprises.
+CREATE TEMP TABLE qa_profile_created(id uuid PRIMARY KEY);
+GRANT SELECT, INSERT, DELETE ON qa_profile_created TO authenticated;
+
 SELECT set_config('request.jwt.claim.sub',pg_temp.aid('actor')::text,true);
 SELECT set_config('request.jwt.claims',jsonb_build_object('sub',pg_temp.aid('actor'),'role','authenticated')::text,true);
 SET LOCAL ROLE authenticated;
@@ -46,9 +51,10 @@ SELECT pg_temp.assert_admin((SELECT count(*)=1 FROM public.setores WHERE nome='Q
 
 -- Custom profile CRUD and system-profile immutability.
 SET LOCAL ROLE authenticated;
-SELECT public.admin_perfil_criar('QA Custom','Perfil customizado',ARRAY[(SELECT id FROM public.permissoes WHERE codigo='auditoria.visualizar')],'QA cria perfil') AS id INTO TEMP TABLE qa_profile_created;
+DELETE FROM qa_profile_created;
+INSERT INTO qa_profile_created(id)
+SELECT public.admin_perfil_criar('QA Custom','Perfil customizado',ARRAY[(SELECT id FROM public.permissoes WHERE codigo='auditoria.visualizar')],'QA cria perfil');
 RESET ROLE;
-GRANT SELECT ON qa_profile_created TO authenticated;
 SELECT pg_temp.assert_admin((SELECT count(*)=1 FROM public.perfis WHERE id=(SELECT id FROM qa_profile_created) AND empresa_id=pg_temp.aid('company_a') AND not is_system),'custom profile created');
 SET LOCAL ROLE authenticated;
 SELECT public.admin_perfil_atualizar((SELECT id FROM qa_profile_created),'QA Custom 2','Atualizado',true,ARRAY[(SELECT id FROM public.permissoes WHERE codigo='estrutura.gerenciar')],'QA edita perfil');
