@@ -4,6 +4,8 @@ import { fileURLToPath } from 'node:url'
 
 const root = fileURLToPath(new URL('..', import.meta.url))
 const testsDir = join(root, 'supabase', 'tests')
+const migrationsDir = join(root, 'supabase', 'migrations')
+const harnessPath = join(root, 'scripts', 'test-db.mjs')
 
 const entries = await readdir(testsDir, { withFileTypes: true })
 const sqlFiles = entries
@@ -12,6 +14,23 @@ const sqlFiles = entries
   .sort()
 
 const errors = []
+
+// The local DB harness must execute every versioned migration. This prevents a green
+// suite from silently omitting a migration that will later run in Supabase.
+const migrationEntries = await readdir(migrationsDir, { withFileTypes: true })
+const migrationFiles = migrationEntries
+  .filter(entry => entry.isFile() && entry.name.endsWith('.sql'))
+  .map(entry => entry.name)
+  .sort()
+const harness = await readFile(harnessPath, 'utf8')
+const harnessMigrations = [...harness.matchAll(/supabase\/migrations\/([^'"`\s]+\.sql)/g)]
+  .map(match => match[1])
+const missingFromHarness = migrationFiles.filter(file => !harnessMigrations.includes(file))
+const unknownInHarness = harnessMigrations.filter(file => !migrationFiles.includes(file))
+if (missingFromHarness.length) errors.push(`test-db.mjs omits migration(s): ${missingFromHarness.join(', ')}`)
+if (unknownInHarness.length) errors.push(`test-db.mjs references missing migration(s): ${unknownInHarness.join(', ')}`)
+if (new Set(harnessMigrations).size !== harnessMigrations.length) errors.push('test-db.mjs contains duplicated migration entries')
+if (harnessMigrations.join('\n') !== [...harnessMigrations].sort().join('\n')) errors.push('test-db.mjs migrations are not in filename/chronological order')
 
 for (const file of sqlFiles) {
   const path = join(testsDir, file)
@@ -56,5 +75,5 @@ if (errors.length) {
   for (const error of errors) console.error(`- ${error}`)
   process.exitCode = 1
 } else {
-  console.log(`PASS: database source preflight (${sqlFiles.length} SQL test files)`)
+  console.log(`PASS: database source preflight (${sqlFiles.length} SQL test files; ${migrationFiles.length} migrations covered)`)
 }
