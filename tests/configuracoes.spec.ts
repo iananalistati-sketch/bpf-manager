@@ -11,7 +11,10 @@ const colleagueId = '20000000-0000-0000-0000-000000000002'
 const unitId = '30000000-0000-0000-0000-000000000001'
 const unit2Id = '30000000-0000-0000-0000-000000000002'
 const profileId = '40000000-0000-0000-0000-000000000001'
-const allPermissions = [...navigationGroups.flatMap(group => group.items.map(item => item.permission)), 'usuarios.gerenciar', 'perfis.gerenciar', 'configuracoes.gerenciar']
+const allPermissions = [
+  ...navigationGroups.flatMap(group => group.items.map(item => item.permission)),
+  'usuarios.gerenciar', 'usuarios.convidar', 'perfis.gerenciar', 'estrutura.gerenciar', 'auditoria.visualizar', 'configuracoes.gerenciar',
+]
 const context: MeuContexto = { usuario_id: userId, nome: 'Ana Qualidade', email: 'ana@example.test', ativo: true, status: 'ativo', empresa_id: companyId, nome_fantasia: 'Empresa de teste', razao_social: 'Empresa de teste', unidade_id: unitId, unidade_nome: 'Unidade Principal', perfis: ['Administrador'], permissoes: allPermissions }
 const baseUser = { id: userId, nome: 'Ana Qualidade', email: 'ana@example.test', empresa_id: companyId, unidade_id: unitId, status: 'ativo', ativo: true, created_at: '2026-09-15T12:00:00Z' }
 const profiles = ['Administrador', 'Responsável Técnico', 'Qualidade', 'Supervisor', 'Operador', 'Auditor', 'Consulta'].map((nome, index) => ({ id: `40000000-0000-0000-0000-${String(index + 1).padStart(12, '0')}`, empresa_id: null, nome, descricao: `Perfil ${nome}`, is_system: true, ativo: true }))
@@ -55,7 +58,7 @@ test('administrador mantém todos os módulos e navega por usuários e perfis', 
   await expect(page.getByRole('heading', { name: 'Configurações', exact: true })).toBeVisible()
   await expect(page.locator('.desktop-sidebar .nav-link')).toHaveCount(17)
   await page.getByRole('navigation', { name: 'Seções de configurações' }).getByRole('button', { name: 'Usuários', exact: true }).click()
-  await expect(page.getByText('Gestão restrita à sua empresa.')).toBeVisible()
+  await expect(page.getByText('Consulta restrita à sua empresa.')).toBeVisible()
   await expect(page.locator('.settings-user-card')).toHaveCount(2)
   await expect(page.getByRole('button', { name: 'Ver detalhes de Maria Qualidade' })).toBeVisible()
   await page.getByRole('button', { name: 'Ver detalhes de Ana Qualidade' }).click()
@@ -148,8 +151,10 @@ test('filtros locais e detalhe pendente preservam fluxo dedicado', async ({ page
   await page.getByLabel('Perfil', { exact: true }).selectOption('sem-perfil')
   await expect(page.locator('.settings-user-card')).toHaveCount(1)
   await page.getByRole('button', { name: 'Ver detalhes de João Pendente' }).click()
-  await expect(page.getByRole('dialog')).toContainText('Este cadastro aguarda aprovação')
-  await expect(page.getByRole('dialog').getByRole('heading', { name: 'Status de acesso' })).toHaveCount(0)
+  const pendingDialog = page.getByRole('dialog')
+  await expect(pendingDialog).toContainText('Cadastro pendente.')
+  await expect(pendingDialog).toContainText('Novos acessos devem usar o fluxo seguro de convite e vínculo.')
+  await expect(pendingDialog.getByRole('heading', { name: 'Status de acesso' })).toHaveCount(0)
   await page.keyboard.press('Escape')
   await page.getByLabel('Nome ou e-mail').fill('inexistente')
   await expect(page.getByText('Nenhum usuário corresponde aos filtros selecionados.')).toBeVisible()
