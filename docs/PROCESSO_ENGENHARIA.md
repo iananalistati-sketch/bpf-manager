@@ -28,7 +28,8 @@ A comunicação ocorre por um ciclo explícito de **entrada → análise especia
 - Dados/Supabase;
 - Segurança/Permissões;
 - Frontend/UX;
-- Auditoria/Governança.
+- Auditoria/Governança;
+- SaaS/Trial/Planos/Provisionamento quando a mudança envolver cadastro público, trial, assinatura, entitlements, billing, onboarding ou multi-membership.
 
 Eles sugerem regras e riscos, mas não produzem implementações independentes concorrentes.
 
@@ -59,14 +60,15 @@ O campo `IMPACTA` identifica outros agentes que precisam receber aquela conclus�
 - Segurança altera RLS → impacta Dados, Banco/Migrations, QA e Validação de Fontes;
 - Dados altera contrato de RPC → impacta Frontend, QA e Segurança;
 - Frontend depende de nova permissão → impacta Segurança, Dados e QA;
-- Auditoria exige novo evento → impacta Dados, Segurança e QA.
+- Auditoria exige novo evento → impacta Dados, Segurança e QA;
+- SaaS altera membership, trial ou entitlement → impacta Produto, Dados, Segurança, Frontend, Governança, Banco/Migrations e QA.
 
 O Orquestrador deve resolver conflitos antes de implementar. Não é permitido deixar duas recomendações incompatíveis coexistirem silenciosamente.
 
 ## Gates obrigatórios
 
 ### Gate 1 — Arquitetura
-Produto, Dados, Segurança, Frontend e Governança retornaram recomendações; dependências e conflitos foram consolidados.
+Produto, Dados, Segurança, Frontend e Governança retornaram recomendações; para demandas SaaS, o Agente 10 também é obrigatório. Dependências e conflitos devem estar consolidados antes de implementar.
 
 ### Gate 2 — Implementação consolidada
 O Orquestrador implementou uma única solução coerente, sem frentes independentes concorrentes.
@@ -75,7 +77,7 @@ O Orquestrador implementou uma única solução coerente, sem frentes independen
 Agente 08 revisou cadeia acumulada, roles, grants, owners, RLS, DDL, fixture e estado final esperado.
 
 ### Gate 4 — Segurança adversarial
-Agente 09 tentou bypass, cross-tenant, autoelevação e chamadas diretas de backend.
+Agente 09 tentou bypass, cross-tenant, autoelevação e chamadas diretas de backend. Em fluxos SaaS também deve testar multi-membership, tenant ativo adulterado, trial isolado, entitlement bypass e provisionamento repetido.
 
 ### Gate 5 — Validação integrada
 Agente 07 revisou contratos entre banco, frontend, testes e documentação e confirmou ausência de bloqueadores conhecidos.
@@ -111,6 +113,8 @@ Para cada marco relevante devem existir, quando aplicáveis:
 - testes de regressão;
 - documentação da decisão.
 
+Para marcos SaaS, também devem existir contratos explícitos de lifecycle, limites/entitlements e compatibilidade de migration.
+
 ## Definição de pronto
 
 Uma implantação só é considerada pronta quando:
@@ -122,5 +126,6 @@ Uma implantação só é considerada pronta quando:
 - estado acumulado das migrations é coerente;
 - testes antigos foram revisados contra o comportamento novo;
 - não existem bloqueadores dos agentes 07, 08 ou 09;
+- para mudanças SaaS, não existem bloqueadores do Agente 10;
 - o comando unificado de validação passou;
 - documentação está atualizada.
