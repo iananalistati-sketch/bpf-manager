@@ -7,6 +7,7 @@ const migrations = [
   'supabase/migrations/20260916223100_fix_authz_reader_identity.sql',
   'supabase/migrations/20260916223400_optimize_administrative_read_rls.sql',
   'supabase/migrations/20260918112000_admin_user_commands.sql',
+  'supabase/migrations/20260918120500_fix_admin_writer_select_grants.sql',
 ]
 const testSuites = [
   'supabase/tests/administrative_user_read.sql',
