@@ -34,6 +34,7 @@ Todo achado deve informar:
 - conferir owners, `EXECUTE`, grants e revogações;
 - comparar testes antigos com o comportamento novo para detectar asserts obsoletas;
 - revisar objetos temporários e mudanças de role nos testes;
+- executar ou exigir o preflight automatizado de fontes do banco antes do teste funcional;
 - verificar se os testes realmente provam o requisito e não apenas passam;
 - conferir isolamento multiempresa/multiunidade;
 - procurar escalada direta ou indireta de privilégios;
@@ -55,6 +56,7 @@ Todo achado deve informar:
 ### Testes
 - O teste foi escrito para o comportamento atual?
 - Algum objeto temporário muda de owner/role sem grants suficientes?
+- O `npm.cmd run validate:db-sources` passa antes do `test:db`?
 - O cenário negativo falha pelo motivo esperado?
 - O teste multiempresa usa de fato tenants distintos?
 - O teste termina sem estado residual?
