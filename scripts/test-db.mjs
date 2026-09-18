@@ -8,10 +8,13 @@ const migrations = [
   'supabase/migrations/20260916223400_optimize_administrative_read_rls.sql',
   'supabase/migrations/20260918112000_admin_user_commands.sql',
   'supabase/migrations/20260918120500_fix_admin_writer_select_grants.sql',
+  'supabase/migrations/20260918134500_complete_administration_foundation.sql',
+  'supabase/migrations/20260918134600_expand_admin_audit_writer_policy.sql',
 ]
 const testSuites = [
   'supabase/tests/administrative_user_read.sql',
   'supabase/tests/admin_user_commands.sql',
+  'supabase/tests/complete_administration_foundation.sql',
 ]
 
 const db = await PGlite.create()
@@ -21,7 +24,6 @@ try {
   await db.exec(await read('supabase/tests/fixtures/current_schema.sql'))
 
   const baseMigration = await read(migrations[0])
-  // Prove the foundational preflight rejects incompatible legacy data without repairing it.
   await db.exec(`BEGIN;
     INSERT INTO empresas(id, razao_social) VALUES
       ('00000000-0000-0000-0000-000000000001', 'A'),
