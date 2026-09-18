@@ -7,6 +7,7 @@ Este arquivo define como agentes de IA devem atuar neste repositório.
 Antes de propor, editar ou revisar qualquer implementação relevante, consulte:
 
 - `docs/REFERENCIA_PROJETO.md`
+- `docs/PROCESSO_ENGENHARIA.md`
 - o documento do agente especializado aplicável em `docs/agentes/`
 
 `docs/REFERENCIA_PROJETO.md` é a fonte principal de verdade sobre objetivo, escopo, arquitetura, segurança, módulos e princípios do BPF Manager.
@@ -17,23 +18,25 @@ Nenhuma implementação deve contrariar silenciosamente a referência do projeto
 
 ## Modelo de trabalho
 
-Os agentes especializados atuam de forma consultiva. Eles analisam sua área, levantam riscos e sugerem soluções. O Orquestrador/Tech Lead integra essas recomendações, resolve conflitos entre elas e é responsável por definir e implementar a estrutura final coerente.
+Os agentes especializados atuam de forma consultiva. Eles analisam sua área, levantam riscos, sugerem soluções e identificam impactos sobre outros agentes. O Orquestrador/Tech Lead integra essas recomendações, resolve conflitos e é o único responsável por definir e consolidar a estrutura final da implementação.
 
-Antes de solicitar um checkpoint local ao usuário, o Agente 07 — Validação de Fontes / Revisão Integrada deve revisar o conjunto já implementado, especialmente migrations encadeadas, grants/RLS, contratos frontend-backend e testes potencialmente obsoletos.
+Agentes não trabalham como silos. Todo achado relevante deve declarar quais áreas impacta, e o Orquestrador deve repassar essa conclusão aos agentes afetados antes de consolidar a solução.
 
-## Fluxo recomendado
+## Fluxo obrigatório
 
-1. Entender a demanda.
-2. Identificar os agentes especialistas envolvidos.
-3. Validar aderência ao objetivo do BPF Manager.
-4. Definir critérios de aceite.
-5. Coletar recomendações de produto, dados, segurança, frontend, QA e governança aplicáveis.
-6. O Orquestrador consolida as recomendações e implementa a menor mudança coerente possível.
-7. Executar revisão integrada de fontes com o Agente 07.
-8. Corrigir bloqueadores encontrados antes do checkpoint local.
-9. Executar build/testes aplicáveis.
-10. Revisar a alteração sob a ótica de segurança e rastreabilidade.
-11. Atualizar documentação quando a decisão alterar comportamento, arquitetura ou escopo.
+1. Entender a demanda e consultar a referência do projeto.
+2. O Orquestrador seleciona os especialistas necessários.
+3. Cada especialista devolve recomendação, dependências, impactos, riscos e critérios de aceite.
+4. O Orquestrador compartilha achados cruzados entre os agentes afetados e resolve conflitos.
+5. O Orquestrador consolida e implementa uma única solução coerente.
+6. Agente 08 revisa banco/migrations e o estado acumulado.
+7. Agente 09 executa revisão adversarial de segurança.
+8. Agente 07 executa validação integrada de fontes e contratos.
+9. QA executa os testes aplicáveis.
+10. Somente sem bloqueadores é permitido solicitar checkpoint local ao usuário.
+11. Após checkpoint verde, aplicar mudanças remotas e validar o estado final.
+
+O detalhamento dos gates está em `docs/PROCESSO_ENGENHARIA.md`.
 
 ## Agentes especializados
 
@@ -45,6 +48,8 @@ Antes de solicitar um checkpoint local ao usuário, o Agente 07 — Validação 
 - `docs/agentes/05-QA.md`
 - `docs/agentes/06-AUDITORIA-GOVERNANCA.md`
 - `docs/agentes/07-VALIDACAO-FONTES.md`
+- `docs/agentes/08-BANCO-MIGRATIONS.md`
+- `docs/agentes/09-SEGURANCA-ADVERSARIAL.md`
 
 ## Regras globais
 
@@ -60,7 +65,9 @@ Antes de solicitar um checkpoint local ao usuário, o Agente 07 — Validação 
 - Manter o fluxo `Execução → Monitoramento → Verificação → Ação Corretiva → Registro` quando aplicável.
 - Não transformar o produto em simples repositório de formulários.
 - Manter a identidade visual aprovada, salvo necessidade funcional clara.
+- Migrations já aplicadas remotamente são imutáveis; correções posteriores exigem nova migration.
+- Nenhum checkpoint deve ser solicitado enquanto existir bloqueador conhecido nos gates internos.
 
 ## Uso com Codex no VS Code
 
-Ao solicitar trabalho ao Codex neste repositório, informe o objetivo da tarefa e peça explicitamente para respeitar `AGENTS.md`. Para tarefas maiores, indique também quais agentes especializados devem orientar a solução.
+Ao solicitar trabalho ao Codex neste repositório, informe o objetivo da tarefa e peça explicitamente para respeitar `AGENTS.md` e `docs/PROCESSO_ENGENHARIA.md`.
