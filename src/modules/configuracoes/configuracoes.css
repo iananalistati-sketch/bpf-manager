@@ -7,6 +7,7 @@
 .settings-content { padding: 26px; }
 .settings-section-heading { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 24px; }
 .settings-section-heading p { color: var(--muted); font-size: 12px; margin-top: 5px; }
+.settings-heading-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
 .settings-notice { display: flex; align-items: flex-start; gap: 10px; background: #f1f7f3; border: 1px solid #dce9e1; border-radius: 8px; padding: 14px 16px; font-size: 12px; color: #4c6c58; margin: 18px 0; }
 .settings-notice strong { display: block; margin-bottom: 4px; }
 .settings-notice.warning { background: #fff7e8; border-color: #ead8b7; color: #88611f; }
@@ -21,9 +22,15 @@
 .settings-overview-card h3 { margin-top: 14px; font-size: 15px; }
 .settings-overview-card p { color: var(--muted); font-size: 12px; margin: 8px 0 20px; }
 .settings-filters { display: grid; grid-template-columns: minmax(180px, 1.5fr) repeat(3, minmax(0, 1fr)); gap: 14px; margin-top: 24px; }
-.settings-filters label, .settings-fields label, .settings-admin-card label { display: grid; gap: 7px; font-size: 12px; color: #52675a; min-width: 0; }
-.settings-filters input, .settings-filters select, .settings-fields input, .settings-fields select, .settings-admin-card input, .settings-admin-card select { width: 100%; min-width: 0; border: 1px solid #dce5df; border-radius: 7px; padding: 10px; background: white; color: #24372f; font: inherit; }
-.settings-filters :is(input, select):focus-visible, .settings-admin-card :is(input, select):focus-visible { outline: 3px solid #36a986; outline-offset: 2px; }
+.settings-audit-filters { grid-template-columns: minmax(220px, 2fr) minmax(160px, 1fr); }
+.settings-filters label, .settings-fields label, .settings-admin-card label, .settings-standalone-field { display: grid; gap: 7px; font-size: 12px; color: #52675a; min-width: 0; }
+.settings-filters input, .settings-filters select, .settings-fields input, .settings-fields select, .settings-admin-card input, .settings-admin-card select, .settings-standalone-field input { width: 100%; min-width: 0; border: 1px solid #dce5df; border-radius: 7px; padding: 10px; background: white; color: #24372f; font: inherit; }
+.settings-filters :is(input, select):focus-visible, .settings-admin-card :is(input, select):focus-visible, .settings-standalone-field input:focus-visible { outline: 3px solid #36a986; outline-offset: 2px; }
+.settings-standalone-field { margin: 18px 0; }
+.settings-field-wide { grid-column: 1 / -1; }
+.settings-input-icon { position: relative; display: block; }
+.settings-input-icon svg { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: #708078; pointer-events: none; }
+.settings-input-icon input { padding-left: 32px; }
 .settings-results { display: flex; justify-content: space-between; gap: 12px; margin: 18px 0; color: #647169; font-size: 12px; }
 .settings-results button { background: transparent; }
 .settings-user-list { display: grid; gap: 14px; }
@@ -57,13 +64,14 @@ body:has(.settings-dialog[open]) { overflow: hidden; }
 .settings-fields legend, .settings-profile-checks legend { font-weight: 600; font-size: 13px; margin-bottom: 14px; }
 .settings-fields input:disabled, .settings-fields select:disabled { background: #f7f9f8; color: #52675a; opacity: 1; -webkit-text-fill-color: #52675a; }
 .settings-profile-checks { margin: 24px 0; border: 1px solid var(--border); border-radius: 8px; padding: 16px; display: grid; gap: 12px; }
+.settings-profile-checks legend { display: flex; align-items: center; gap: 6px; }
 .settings-profile-checks label { display: flex; gap: 9px; align-items: center; font-size: 13px; }
 .settings-dialog input[type=checkbox] { accent-color: var(--primary); width: 16px; height: 16px; flex-shrink: 0; }
 .settings-future-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .settings-dialog button:disabled { cursor: not-allowed; opacity: .55; }
 .settings-admin-stack { display: grid; gap: 16px; margin: 22px 0; }
 .settings-admin-card { display: grid; gap: 14px; border: 1px solid var(--border); border-radius: 8px; padding: 18px; background: #fcfdfc; }
-.settings-admin-card h4 { font-size: 14px; margin-bottom: 5px; }
+.settings-admin-card h3, .settings-admin-card h4 { font-size: 14px; margin-bottom: 5px; }
 .settings-admin-card > div > p { color: #647169; font-size: 12px; }
 .settings-admin-card > .button { justify-self: start; }
 .settings-profile-actions { display: grid; gap: 8px; }
@@ -78,21 +86,47 @@ body:has(.settings-dialog[open]) { overflow: hidden; }
 .settings-permission { display: flex; align-items: flex-start; gap: 8px; margin: 10px 0; }
 .settings-permission strong { font-size: 12px; font-weight: 550; }
 .settings-permission small { display: block; color: #647169; font-size: 11px; overflow-wrap: anywhere; }
+.settings-structure-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-top: 18px; }
+.settings-structure-card { border: 1px solid var(--border); border-radius: 8px; padding: 18px; background: white; }
+.settings-sector-list { display: grid; gap: 6px; margin-top: 16px; }
+.settings-sector-row { width: 100%; display: flex; justify-content: space-between; align-items: center; gap: 12px; text-align: left; border: 1px solid #edf1ee; border-radius: 7px; padding: 10px 12px; background: #fafcfb; color: inherit; }
+.settings-sector-row:hover { border-color: #b7d3c1; background: #f4f9f6; }
+.settings-sector-row strong, .settings-sector-row small { display: block; }
+.settings-sector-row strong { font-size: 12px; }
+.settings-sector-row small { color: #647169; margin-top: 3px; }
+.settings-audit-list { display: grid; gap: 10px; }
+.settings-audit-event { border: 1px solid var(--border); border-radius: 8px; background: white; overflow: hidden; }
+.settings-audit-event summary { display: flex; justify-content: space-between; align-items: center; gap: 12px; cursor: pointer; padding: 14px 16px; list-style-position: inside; }
+.settings-audit-event summary span:first-of-type { min-width: 0; flex: 1; }
+.settings-audit-event summary strong, .settings-audit-event summary small { display: block; overflow-wrap: anywhere; }
+.settings-audit-event summary strong { font-size: 13px; }
+.settings-audit-event summary small { margin-top: 4px; color: #647169; font-size: 11px; }
+.settings-audit-body { border-top: 1px solid var(--border); padding: 16px; background: #fafcfb; }
+.settings-audit-body dl { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; }
+.settings-audit-body dt { color: #647169; font-size: 11px; }
+.settings-audit-body dd { margin: 4px 0 0; overflow-wrap: anywhere; font-size: 12px; }
+.settings-audit-json { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; margin-top: 14px; }
+.settings-audit-json h4 { font-size: 12px; margin-bottom: 6px; }
+.settings-audit-json pre { max-height: 240px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; border: 1px solid var(--border); border-radius: 7px; background: white; padding: 10px; font-size: 10px; }
 @media (max-width: 1150px) {
   .settings-filters, .settings-overview, .settings-user-meta, .settings-profiles-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 700px) {
+  .settings-structure-grid, .settings-audit-json, .settings-audit-body dl { grid-template-columns: 1fr; }
 }
 @media (max-width: 600px) {
   .settings-content, .settings-dialog-content { padding: 18px; }
   .settings-tabs { gap: 4px; }
   .settings-tabs button { padding: 10px; font-size: 12px; }
   .settings-tabs svg { width: 15px; }
-  .settings-page .page-heading { flex-wrap: wrap; }
-  .settings-overview-cards, .settings-profiles-grid, .settings-permission-groups, .settings-fields, .settings-filters { grid-template-columns: 1fr; }
+  .settings-page .page-heading, .settings-section-heading { flex-wrap: wrap; }
+  .settings-overview-cards, .settings-profiles-grid, .settings-permission-groups, .settings-fields, .settings-filters, .settings-audit-filters { grid-template-columns: 1fr; }
   .settings-overview { padding: 16px; gap: 16px; }
   .settings-user-card { padding: 16px; }
-  .settings-user-footer, .settings-profile-action { flex-wrap: wrap; }
+  .settings-user-footer, .settings-profile-action, .settings-audit-event summary { flex-wrap: wrap; }
   .settings-user-heading { gap: 8px; }
   .settings-feedback { padding: 24px 8px; }
-  .settings-profile-action .button { width: 100%; }
+  .settings-profile-action .button, .settings-heading-actions .button { width: 100%; }
+  .settings-heading-actions { width: 100%; }
 }
 @media (prefers-reduced-motion: reduce) { .settings-spinner { animation: none; } }
