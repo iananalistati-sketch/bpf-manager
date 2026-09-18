@@ -8,6 +8,7 @@ const migrations = [
   'supabase/migrations/20260916223400_optimize_administrative_read_rls.sql',
   'supabase/migrations/20260918112000_admin_user_commands.sql',
   'supabase/migrations/20260918120500_fix_admin_writer_select_grants.sql',
+  'supabase/migrations/20260918133000_serialize_last_admin_mutations.sql',
   'supabase/migrations/20260918134450_allow_admin_writer_set_role.sql',
   'supabase/migrations/20260918134500_complete_administration_foundation.sql',
   'supabase/migrations/20260918134600_expand_admin_audit_writer_policy.sql',
@@ -29,15 +30,7 @@ try {
   await db.exec(await read('supabase/tests/fixtures/current_schema.sql'))
 
   const baseMigration = await read(migrations[0])
-  await db.exec(`BEGIN;
-    INSERT INTO empresas(id, razao_social) VALUES
-      ('00000000-0000-0000-0000-000000000001', 'A'),
-      ('00000000-0000-0000-0000-000000000002', 'B');
-    INSERT INTO unidades(id, empresa_id, nome) VALUES
-      ('00000000-0000-0000-0000-000000000003', '00000000-0000-0000-0000-000000000002', 'B');
-    INSERT INTO auth.users(id) VALUES ('00000000-0000-0000-0000-000000000004');
-    UPDATE usuarios SET empresa_id = '00000000-0000-0000-0000-000000000001',
-      unidade_id = '00000000-0000-0000-0000-000000000003';`)
+  await db.exec(`BEGIN;\n    INSERT INTO empresas(id, razao_social) VALUES\n      ('00000000-0000-0000-0000-000000000001', 'A'),\n      ('00000000-0000-0000-0000-000000000002', 'B');\n    INSERT INTO unidades(id, empresa_id, nome) VALUES\n      ('00000000-0000-0000-0000-000000000003', '00000000-0000-0000-0000-000000000002', 'B');\n    INSERT INTO auth.users(id) VALUES ('00000000-0000-0000-0000-000000000004');\n    UPDATE usuarios SET empresa_id = '00000000-0000-0000-0000-000000000001',\n      unidade_id = '00000000-0000-0000-0000-000000000003';`)
   let rejected = false
   try { await db.exec(baseMigration) } catch (error) {
     if (!error.message.includes('Existing usuarios contain incompatible empresa/unidade')) throw error
