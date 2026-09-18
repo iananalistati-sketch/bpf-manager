@@ -198,7 +198,7 @@ Gestão de:
 - parâmetros da plataforma;
 - cadastros auxiliares.
 
-Estado em 16/09/2026: `/configuracoes` oferece Visão Geral, Usuários e Perfis e Permissões, com acesso granular e consultas reais. A fundação de leitura administrativa foi preparada em migration: RLS determina a empresa pelo ator autenticado ativo e exige `configuracoes.visualizar` e `usuarios.gerenciar`, provenientes de perfis ativos compatíveis. Uma função privada, sem parâmetros e com proprietário restrito sujeito a RLS, resolve a autorização sem recursão. A migration também exclui perfis inativos/incompatíveis de `v_meu_contexto` e adiciona FK composta empresa/unidade. Foi validada em PostgreSQL local isolado; **a aplicação remota ainda está pendente de aprovação**, e o banco remoto continua limitado à leitura do próprio cadastro. Nenhuma escrita administrativa foi habilitada. Aprovação, status, vínculos e edição de permissões continuam dependendo de comandos específicos e auditoria transacional. Ver [módulo existente](CONFIGURACOES_USUARIOS_PERFIS.md) e [decisão, testes e estado da migration](LEITURA_ADMINISTRATIVA_USUARIOS.md).
+Estado em 18/09/2026: `/configuracoes` oferece Visão Geral, Usuários e Perfis e Permissões, com acesso granular e consultas reais. A fundação de leitura administrativa já está aplicada no Supabase remoto: a RLS determina a empresa pelo ator autenticado ativo e exige `configuracoes.visualizar` e `usuarios.gerenciar`, provenientes de perfis ativos compatíveis. Uma função privada, sem parâmetros e com proprietário restrito sujeito a RLS, resolve a autorização sem recursão. As migrations também excluem perfis inativos/incompatíveis de `v_meu_contexto`, adicionam FK composta empresa/unidade e consolidam as policies administrativas. A leitura remota foi validada sem exposição de empresa externa e sem liberar escritas administrativas. O próximo estágio é criar comandos administrativos transacionais com trilha de auditoria antes de habilitar aprovação, bloqueio, alteração de unidade, atribuição de perfis e demais ações de escrita. Ver [módulo existente](CONFIGURACOES_USUARIOS_PERFIS.md) e [decisão, testes e estado da leitura administrativa](LEITURA_ADMINISTRATIVA_USUARIOS.md).
 
 ## 7. Trilhas de auditoria
 
@@ -359,4 +359,4 @@ Se uma implementação entrar em conflito com esta referência, a divergência d
 **Projeto:** BPF Manager  
 **Documento:** Referência geral do projeto  
 **Status:** Ativo  
-**Última atualização:** 16/09/2026
+**Última atualização:** 18/09/2026
