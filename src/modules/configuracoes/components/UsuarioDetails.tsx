@@ -26,18 +26,15 @@ export function UsuarioDetails({ usuario, data, onClose, onChanged }: {
     if (!ok) return
     onChanged()
   }
-
   const changeStatus = async (status: 'ativo' | 'inativo' | 'bloqueado') => {
     const label = statusLabels[status]
     if ((status === 'inativo' || status === 'bloqueado') && !window.confirm(`Confirma alterar o status de ${usuario.nome || usuario.email || 'este usuário'} para ${label}?`)) return
     done(await actions.alterarStatus(usuario.id, status, statusReason))
   }
-
   const changeUnit = async () => {
     if (!window.confirm('Confirma a alteração de unidade deste usuário?')) return
     done(await actions.alterarUnidade(usuario.id, unitId || null, unitReason))
   }
-
   const changeProfile = async (perfilId: string, acao: 'atribuir' | 'remover') => {
     const perfil = data.perfis.find(item => item.id === perfilId)
     if (!perfil) return
@@ -47,7 +44,7 @@ export function UsuarioDetails({ usuario, data, onClose, onChanged }: {
 
   return <DetailsDialog title="Detalhes do usuário" onClose={onClose}>
     <div className="settings-detail-intro"><h3>{usuario.nome || 'Nome não informado'}</h3><p>{usuario.email || 'E-mail não informado'}</p><StatusBadge status={usuario.status} /></div>
-    {pending && <p className="settings-notice warning"><AlertTriangle size={18} />Este cadastro aguarda aprovação e vínculo organizacional. O fluxo seguro de aprovação será implementado separadamente e nenhum acesso é concedido por esta tela.</p>}
+    {pending && <p className="settings-notice warning"><AlertTriangle size={18} /><span><strong>Cadastro pendente.</strong> Este registro não pode ser ativado por edição direta. Novos acessos devem usar o fluxo seguro de convite e vínculo.</span></p>}
     {!pending && <p className="settings-notice"><ShieldCheck size={18} /><span><strong>Administração protegida.</strong> Alterações são executadas por comandos seguros no servidor, exigem justificativa e geram trilha de auditoria.</span></p>}
     {isSelf && !pending && <p className="settings-notice warning"><LockKeyhole size={18} />Por segurança, você não pode bloquear/inativar a própria conta nem alterar seus próprios perfis administrativos.</p>}
     {actions.error && <p className="settings-notice warning" role="alert"><AlertTriangle size={18} />{actions.error}</p>}
@@ -59,6 +56,7 @@ export function UsuarioDetails({ usuario, data, onClose, onChanged }: {
       <label>Empresa<select value={usuario.empresa_id ?? ''} disabled><option value="">Não vinculada</option>{data.empresas.map(empresa => <option key={empresa.id} value={empresa.id}>{empresa.nome_fantasia || empresa.razao_social}</option>)}</select></label>
       <label>Situação do cadastro<input value={usuario.ativo ? 'Ativo' : 'Inativo'} readOnly /></label>
     </fieldset>
+    <button className="button primary" disabled>Salvar alterações</button>
 
     {!pending && <div className="settings-admin-stack">
       <section className="settings-admin-card" aria-labelledby="status-admin-title">
@@ -85,19 +83,17 @@ export function UsuarioDetails({ usuario, data, onClose, onChanged }: {
           <div className="settings-profile-actions">
             {data.perfis.map(perfil => {
               const linked = assigned.has(perfil.id)
-              return <div className="settings-profile-action" key={perfil.id}><span><strong>{perfil.nome}</strong>{!perfil.ativo && <small>Perfil inativo</small>}</span><button className="button secondary"
-                disabled={actions.busy !== null || isSelf || profileReason.trim().length < 5 || (!linked && !perfil.ativo)}
-                onClick={() => void changeProfile(perfil.id, linked ? 'remover' : 'atribuir')}>{linked ? 'Remover' : 'Atribuir'}</button></div>
+              return <div className="settings-profile-action" key={perfil.id}><span><strong>{perfil.nome}</strong>{!perfil.ativo && <small>Perfil inativo</small>}</span><button className="button secondary" disabled={actions.busy !== null || isSelf || profileReason.trim().length < 5 || (!linked && !perfil.ativo)} onClick={() => void changeProfile(perfil.id, linked ? 'remover' : 'atribuir')}>{linked ? 'Remover' : 'Atribuir'}</button></div>
             })}
           </div>
         </>}
       </section>
     </div>}
 
-    {pending && <fieldset className="settings-profile-checks" disabled><legend>Perfis vinculados · somente leitura</legend>
+    {pending && <><fieldset className="settings-profile-checks" disabled><legend>Perfis vinculados · somente leitura</legend>
       {data.perfis.length === 0 ? <p>Nenhum perfil disponível para consulta.</p> : data.perfis.map(perfil => <label key={perfil.id}><input type="checkbox" checked={assigned.has(perfil.id)} readOnly /><span>{perfil.nome}{!perfil.ativo && ' (inativo)'}</span></label>)}
       {assigned.size === 0 && <p className="settings-muted">Nenhum vínculo de perfil visível para este usuário.</p>}
-    </fieldset>}
+    </fieldset><div className="settings-future-actions"><button className="button secondary" disabled>Ativar</button><button className="button secondary" disabled>Inativar</button><button className="button secondary" disabled>Bloquear</button></div></>}
     <p className="settings-muted">Cadastrado em {displayDate(usuario.created_at)}. Toda escrita habilitada nesta tela passa pelo backend auditado.</p>
   </DetailsDialog>
 }
