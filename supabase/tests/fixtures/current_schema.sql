@@ -39,6 +39,16 @@ CREATE TABLE public.unidades (
   updated_at timestamptz NOT NULL DEFAULT now(),
   created_by uuid
 );
+CREATE TABLE public.setores (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  unidade_id uuid NOT NULL REFERENCES public.unidades,
+  nome text NOT NULL,
+  codigo text,
+  ativo boolean NOT NULL DEFAULT true,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  created_by uuid
+);
 CREATE TABLE public.usuarios (
   id uuid PRIMARY KEY REFERENCES auth.users ON DELETE CASCADE,
   nome text,
@@ -99,6 +109,7 @@ ALTER TABLE public.usuarios ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.usuario_perfis ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.empresas ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.unidades ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.setores ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.perfis ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.permissoes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.perfil_permissoes ENABLE ROW LEVEL SECURITY;
@@ -111,6 +122,9 @@ CREATE POLICY empresas_select_empresa ON public.empresas FOR SELECT TO authentic
 USING (id IN (SELECT empresa_id FROM public.usuarios WHERE id = (SELECT auth.uid()) AND ativo AND status = 'ativo'));
 CREATE POLICY unidades_select_empresa ON public.unidades FOR SELECT TO authenticated
 USING (empresa_id IN (SELECT empresa_id FROM public.usuarios WHERE id = (SELECT auth.uid()) AND ativo AND status = 'ativo'));
+CREATE POLICY setores_select_empresa ON public.setores FOR SELECT TO authenticated
+USING (EXISTS (SELECT 1 FROM public.unidades un JOIN public.usuarios u ON u.empresa_id = un.empresa_id
+  WHERE un.id = setores.unidade_id AND u.id = (SELECT auth.uid()) AND u.ativo AND u.status = 'ativo'));
 CREATE POLICY perfis_select_empresa ON public.perfis FOR SELECT TO authenticated
 USING ((empresa_id IS NULL AND is_system) OR empresa_id IN
   (SELECT empresa_id FROM public.usuarios WHERE id = (SELECT auth.uid()) AND ativo AND status = 'ativo'));
