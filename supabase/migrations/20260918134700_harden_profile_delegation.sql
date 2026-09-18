@@ -5,6 +5,10 @@ set statement_timeout = '60s';
 -- The restricted writer may inspect the permission catalog, but remains a NOLOGIN/NOBYPASSRLS role.
 alter policy permissoes_admin_writer_select on public.permissoes using (true);
 
+-- The previous migration intentionally removes the deployer's SET privilege on bpf_admin_writer.
+-- Re-enable it only for the duration of this migration so these SECURITY DEFINER helpers are
+-- owned by the restricted role, then remove it again before finishing.
+grant bpf_admin_writer to postgres with inherit false, set true;
 grant create on schema private to bpf_admin_writer;
 set role bpf_admin_writer;
 
