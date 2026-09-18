@@ -12,12 +12,14 @@ const migrations = [
   'supabase/migrations/20260918134500_complete_administration_foundation.sql',
   'supabase/migrations/20260918134600_expand_admin_audit_writer_policy.sql',
   'supabase/migrations/20260918134700_harden_profile_delegation.sql',
+  'supabase/migrations/20260918134800_fix_complete_admin_writer_grants.sql',
 ]
 const testSuites = [
   'supabase/tests/administrative_user_read.sql',
   'supabase/tests/admin_user_commands.sql',
   'supabase/tests/complete_administration_foundation.sql',
   'supabase/tests/profile_delegation_security.sql',
+  'supabase/tests/structure_admin_paths.sql',
 ]
 
 const db = await PGlite.create()
