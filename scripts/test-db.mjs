@@ -8,6 +8,7 @@ const migrations = [
   'supabase/migrations/20260916223400_optimize_administrative_read_rls.sql',
   'supabase/migrations/20260918112000_admin_user_commands.sql',
   'supabase/migrations/20260918120500_fix_admin_writer_select_grants.sql',
+  'supabase/migrations/20260918134450_allow_admin_writer_set_role.sql',
   'supabase/migrations/20260918134500_complete_administration_foundation.sql',
   'supabase/migrations/20260918134600_expand_admin_audit_writer_policy.sql',
   'supabase/migrations/20260918134700_harden_profile_delegation.sql',
