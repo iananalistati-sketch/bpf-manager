@@ -8,7 +8,8 @@ Antes de propor, editar ou revisar qualquer implementação relevante, consulte:
 
 - `docs/REFERENCIA_PROJETO.md`
 - `docs/PROCESSO_ENGENHARIA.md`
-- o documento do agente especializado aplicável em `docs/agentes/`
+- `docs/SAAS_PRODUTO_COMERCIAL.md` quando a demanda envolver cadastro público, trial, planos, assinatura, limites, provisionamento, onboarding ou multi-membership;
+- o documento do agente especializado aplicável em `docs/agentes/`.
 
 `docs/REFERENCIA_PROJETO.md` é a fonte principal de verdade sobre objetivo, escopo, arquitetura, segurança, módulos e princípios do BPF Manager.
 
@@ -50,10 +51,13 @@ O detalhamento dos gates está em `docs/PROCESSO_ENGENHARIA.md`.
 - `docs/agentes/07-VALIDACAO-FONTES.md`
 - `docs/agentes/08-BANCO-MIGRATIONS.md`
 - `docs/agentes/09-SEGURANCA-ADVERSARIAL.md`
+- `docs/agentes/10-SAAS-TRIAL-PLANOS.md`
 
 ## Regras globais
 
 - Preservar suporte multiempresa e multiunidade.
+- Evoluir identidade e vínculo empresarial sem quebrar isolamento entre tenants.
+- Separar plano/entitlement de perfil/permissão.
 - Não conceder privilégios automaticamente por conveniência.
 - Não depender apenas da interface para segurança.
 - Aplicar RLS em tabelas expostas.
