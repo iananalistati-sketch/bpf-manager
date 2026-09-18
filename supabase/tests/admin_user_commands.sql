@@ -34,9 +34,11 @@ WHERE id = pg_temp.cmd_id('foreign_user');
 UPDATE public.usuarios SET empresa_id = pg_temp.cmd_id('company_a'), unidade_id = pg_temp.cmd_id('unit_a1'), ativo = false, status = 'pendente'
 WHERE id = pg_temp.cmd_id('pending_user');
 
--- Ensure the four permissions used by command authorization/admin-safety exist in the fixture.
-INSERT INTO public.permissoes(codigo)
-VALUES ('configuracoes.gerenciar'), ('perfis.gerenciar')
+-- Ensure the permissions used by command authorization/admin-safety exist in the fixture.
+INSERT INTO public.permissoes(codigo, modulo, acao)
+VALUES
+  ('configuracoes.gerenciar', 'configuracoes', 'gerenciar'),
+  ('perfis.gerenciar', 'perfis', 'gerenciar')
 ON CONFLICT (codigo) DO NOTHING;
 
 INSERT INTO public.perfis(id, empresa_id, nome, is_system, ativo) VALUES
