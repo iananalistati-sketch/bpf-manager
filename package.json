@@ -7,7 +7,11 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test:e2e": "playwright test",
+    "validate:db-sources": "node scripts/validate-db-sources.mjs",
+    "test:db": "node scripts/validate-db-sources.mjs && node scripts/test-db.mjs",
+    "validate": "npm run test:db && npm run build && npm run lint && npm run test:e2e"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.116.0",
@@ -17,7 +21,9 @@
     "react-router-dom": "^7.18.3"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "0.5.8",
     "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.63.0",
     "@types/node": "^24.13.3",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.7",
