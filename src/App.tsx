@@ -7,6 +7,7 @@ import { MainLayout } from './layouts/MainLayout'
 import { DashboardPage } from './pages/DashboardPage'
 import { ModulePage } from './pages/ModulePage'
 import { LoginPage } from './pages/LoginPage'
+import { ResetPasswordPage } from './pages/ResetPasswordPage'
 import { navigationGroups } from './lib/navigation'
 import './App.css'
 import './auth.css'
@@ -20,6 +21,7 @@ export default function App() {
 
   return <AuthProvider><BrowserRouter><Routes>
     <Route path="/login" element={<LoginPage />} />
+    <Route path="/redefinir-senha" element={<ResetPasswordPage />} />
     <Route element={<ProtectedRoute />}>
       <Route element={<MainLayout />}>
         <Route index element={<Navigate to="/dashboard" replace />} />
