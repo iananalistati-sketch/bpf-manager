@@ -60,6 +60,13 @@ Regras:
 - helpers/RPCs/RLS críticos devem derivar e validar o escopo autorizado;
 - troca de tenant deve invalidar/recarregar contexto e permissões.
 
+Na Fase 2, a estratégia adotada é **contexto por request validado pelo backend**, sem persistir autorização em `user_metadata`. Os contratos novos são:
+
+- `public.meus_vinculos()` — lista somente memberships operacionais da identidade autenticada;
+- `public.meu_contexto_empresa(p_empresa_id)` — resolve identidade, membership, empresa, unidade, owner, perfis e permissões apenas quando o JWT atual possui membership ativo para a empresa solicitada.
+
+Esses contratos coexistem com `v_meu_contexto` durante a transição e não substituem ainda o runtime legado.
+
 ## 5. Trial/workspace
 
 A empresa/workspace deve possuir estado capaz de distinguir pelo menos:
@@ -186,6 +193,14 @@ A migração para memberships deve usar novas migrations e preservar temporariam
 
 A remoção das estruturas legadas só pode ocorrer após backfill, dupla validação, migração dos contratos e testes completos.
 
+### Estado de implementação em 23/09/2026
+
+- Fase 1 — `usuario_empresas` e `usuario_empresa_perfis`: implementada e aplicada remotamente, com backfill validado;
+- Fase 2 — contrato de tenant/contexto: implementado em fonte e em validação local antes de deploy remoto;
+- frontend continua usando o contrato legado nesta etapa;
+- nenhum dado legado foi removido;
+- nenhuma autorização depende de `user_metadata` ou de `empresa_id` informado sem validação de membership.
+
 ## 14. Critérios de estado final
 
 - uma identidade pode participar de múltiplas empresas;
@@ -200,5 +215,5 @@ A remoção das estruturas legadas só pode ocorrer após backfill, dupla valida
 
 ---
 
-**Status:** Arquitetura alvo do Marco 1.5  
-**Data:** 18/09/2026
+**Status:** Arquitetura alvo do Marco 1.5 / Fases 1 e 2 em evolução  
+**Última atualização:** 23/09/2026
