@@ -2,7 +2,6 @@ import { readFile } from 'node:fs/promises'
 import { PGlite } from '@electric-sql/pglite'
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), 'utf8')
-const membershipMigration = 'supabase/migrations/20260923143000_membership_compatibility_foundation.sql'
 const migrations = [
   'supabase/migrations/20260916163832_administrative_user_read.sql',
   'supabase/migrations/20260916223100_fix_authz_reader_identity.sql',
@@ -15,8 +14,9 @@ const migrations = [
   'supabase/migrations/20260918134600_expand_admin_audit_writer_policy.sql',
   'supabase/migrations/20260918134700_harden_profile_delegation.sql',
   'supabase/migrations/20260918134800_fix_complete_admin_writer_grants.sql',
-  membershipMigration,
+  'supabase/migrations/20260923143000_membership_compatibility_foundation.sql',
 ]
+const membershipMigration = migrations.at(-1)
 const testSuites = [
   'supabase/tests/administrative_user_read.sql',
   'supabase/tests/admin_user_commands.sql',
