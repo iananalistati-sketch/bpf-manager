@@ -15,8 +15,9 @@ const migrations = [
   'supabase/migrations/20260918134700_harden_profile_delegation.sql',
   'supabase/migrations/20260918134800_fix_complete_admin_writer_grants.sql',
   'supabase/migrations/20260923143000_membership_compatibility_foundation.sql',
+  'supabase/migrations/20260923150000_tenant_context_contract.sql',
 ]
-const membershipMigration = migrations.at(-1)
+const membershipMigration = migrations.at(-2)
 const testSuites = [
   'supabase/tests/administrative_user_read.sql',
   'supabase/tests/admin_user_commands.sql',
@@ -24,6 +25,7 @@ const testSuites = [
   'supabase/tests/profile_delegation_security.sql',
   'supabase/tests/structure_admin_paths.sql',
   'supabase/tests/membership_compatibility.sql',
+  'supabase/tests/tenant_context_contract.sql',
 ]
 
 const db = await PGlite.create()
