@@ -10,6 +10,8 @@ export type AuthContextValue = {
   contextoError: string | null
   signIn: (email: string, password: string) => Promise<string | null>
   signUp: (email: string, password: string) => Promise<SignUpResult>
+  requestPasswordReset: (email: string) => Promise<string | null>
+  updatePassword: (password: string) => Promise<string | null>
   signOut: () => Promise<void>
   refreshContexto: () => Promise<void>
 }
