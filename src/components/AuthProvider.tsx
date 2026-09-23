@@ -39,9 +39,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   useEffect(() => {
-    if (supabaseConfigError) {
-      return
-    }
+    if (supabaseConfigError) return
 
     const bootstrap = async () => {
       const { data, error } = await supabase.auth.getSession()
@@ -82,7 +80,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (supabaseConfigError) return { error: supabaseConfigError, needsEmailConfirmation: false }
 
       const { data, error } = await supabase.auth.signUp({ email, password })
-
       if (error) {
         return {
           error: error.message.toLowerCase().includes('password')
@@ -92,10 +89,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       }
 
-      return {
-        error: null,
-        needsEmailConfirmation: !data.session,
-      }
+      return { error: null, needsEmailConfirmation: !data.session }
+    },
+    requestPasswordReset: async (email) => {
+      if (supabaseConfigError) return supabaseConfigError
+      const redirectTo = `${window.location.origin}/redefinir-senha`
+      const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo })
+      return error ? 'Não foi possível solicitar a recuperação agora. Tente novamente em instantes.' : null
+    },
+    updatePassword: async (password) => {
+      if (supabaseConfigError) return supabaseConfigError
+      const { error } = await supabase.auth.updateUser({ password })
+      if (!error) return null
+      return error.message.toLowerCase().includes('password')
+        ? 'A nova senha não atende aos requisitos mínimos de segurança.'
+        : 'Não foi possível atualizar a senha. Solicite um novo link de recuperação.'
     },
     signOut: async () => {
       if (supabaseConfigError) return
