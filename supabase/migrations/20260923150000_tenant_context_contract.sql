@@ -98,6 +98,8 @@ create policy permissoes_tenant_reader_catalogo on public.permissoes
   using (true);
 
 -- Lista apenas memberships operacionais da identidade atual.
+-- Funcoes privadas sao criadas e administradas enquanto o owner restrito esta ativo.
+-- Assim ACL/comment nao dependem de postgres possuir o objeto apos RESET ROLE.
 grant create on schema private to bpf_tenant_reader;
 set role bpf_tenant_reader;
 
@@ -201,10 +203,6 @@ as $function$
   group by u.id, ue.id, e.nome_fantasia, e.razao_social, un.nome
 $function$;
 
-reset role;
-revoke create on schema private from bpf_tenant_reader;
-grant bpf_tenant_reader to postgres with inherit false, set false;
-
 revoke all on function private.meus_vinculos() from public, anon, authenticated, service_role;
 revoke all on function private.meu_contexto_empresa(uuid) from public, anon, authenticated, service_role;
 grant execute on function private.meus_vinculos() to authenticated;
@@ -214,6 +212,10 @@ comment on function private.meus_vinculos() is
   'Lista memberships ativos do subject JWT globalmente ativo; owner restrito bpf_tenant_reader e sujeito a RLS.';
 comment on function private.meu_contexto_empresa(uuid) is
   'Resolve contexto e RBAC de um tenant somente quando o subject JWT possui membership ativo na empresa solicitada.';
+
+reset role;
+revoke create on schema private from bpf_tenant_reader;
+grant bpf_tenant_reader to postgres with inherit false, set false;
 
 -- Wrappers RPC em public continuam SECURITY INVOKER; autorizacao real fica no reader restrito.
 create function public.meus_vinculos()
