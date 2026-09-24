@@ -4,6 +4,7 @@ set lock_timeout = '5s';
 set statement_timeout = '60s';
 
 -- Reader dedicado ao contexto multiempresa. Nao loga, nao bypassa RLS e nao herda privilegios.
+-- Em Supabase hospedado, roles restritas nao devem depender de USAGE no schema gerenciado auth.
 do $block$
 begin
   if not exists (select 1 from pg_roles where rolname = 'bpf_tenant_reader') then
@@ -14,9 +15,8 @@ end
 $block$;
 
 grant bpf_tenant_reader to postgres with inherit false, set true;
-grant usage on schema public, private, auth to bpf_tenant_reader;
+grant usage on schema public, private to bpf_tenant_reader;
 grant usage on schema private to authenticated;
-grant execute on function auth.uid() to bpf_tenant_reader;
 
 grant select (id, nome, email, ativo, status) on public.usuarios to bpf_tenant_reader;
 grant select (id, usuario_id, empresa_id, unidade_id, status, is_owner)
@@ -34,14 +34,15 @@ grant select (perfil_id, permissao_id)
 grant select (id, codigo)
   on public.permissoes to bpf_tenant_reader;
 
--- RLS do reader dedicado: somente identidade atual e memberships proprios.
+-- Subject JWT lido diretamente do setting confiavel da requisicao, como ja adotado
+-- pelo reader administrativo remoto. Isso evita dependencia do schema auth.
 create policy usuarios_tenant_reader_proprio on public.usuarios
   for select to bpf_tenant_reader
-  using (id = (select auth.uid()));
+  using (id = nullif(current_setting('request.jwt.claim.sub', true), '')::uuid);
 
 create policy usuario_empresas_tenant_reader_proprio on public.usuario_empresas
   for select to bpf_tenant_reader
-  using (usuario_id = (select auth.uid()));
+  using (usuario_id = nullif(current_setting('request.jwt.claim.sub', true), '')::uuid);
 
 create policy usuario_empresa_perfis_tenant_reader_proprio on public.usuario_empresa_perfis
   for select to bpf_tenant_reader
@@ -49,7 +50,7 @@ create policy usuario_empresa_perfis_tenant_reader_proprio on public.usuario_emp
     select 1
     from public.usuario_empresas ue
     where ue.id = usuario_empresa_perfis.usuario_empresa_id
-      and ue.usuario_id = (select auth.uid())
+      and ue.usuario_id = nullif(current_setting('request.jwt.claim.sub', true), '')::uuid
   ));
 
 create policy empresas_tenant_reader_vinculos on public.empresas
@@ -58,7 +59,7 @@ create policy empresas_tenant_reader_vinculos on public.empresas
     select 1
     from public.usuario_empresas ue
     where ue.empresa_id = empresas.id
-      and ue.usuario_id = (select auth.uid())
+      and ue.usuario_id = nullif(current_setting('request.jwt.claim.sub', true), '')::uuid
       and ue.status = 'ativo'
   ));
 
@@ -68,7 +69,7 @@ create policy unidades_tenant_reader_vinculos on public.unidades
     select 1
     from public.usuario_empresas ue
     where ue.empresa_id = unidades.empresa_id
-      and ue.usuario_id = (select auth.uid())
+      and ue.usuario_id = nullif(current_setting('request.jwt.claim.sub', true), '')::uuid
       and ue.status = 'ativo'
   ));
 
@@ -81,7 +82,7 @@ create policy perfis_tenant_reader_escopo on public.perfis
         select 1
         from public.usuario_empresas ue
         where ue.empresa_id = perfis.empresa_id
-          and ue.usuario_id = (select auth.uid())
+          and ue.usuario_id = nullif(current_setting('request.jwt.claim.sub', true), '')::uuid
           and ue.status = 'ativo'
       )
     )
@@ -99,7 +100,6 @@ create policy permissoes_tenant_reader_catalogo on public.permissoes
 
 -- Lista apenas memberships operacionais da identidade atual.
 -- Funcoes privadas sao criadas e administradas enquanto o owner restrito esta ativo.
--- Assim ACL/comment nao dependem de postgres possuir o objeto apos RESET ROLE.
 grant create on schema private to bpf_tenant_reader;
 set role bpf_tenant_reader;
 
@@ -136,8 +136,8 @@ as $function$
     on e.id = ue.empresa_id
    and e.ativo
   left join public.unidades un on un.id = ue.unidade_id
-  where (select auth.uid()) is not null
-    and u.id = (select auth.uid())
+  where nullif(current_setting('request.jwt.claim.sub', true), '')::uuid is not null
+    and u.id = nullif(current_setting('request.jwt.claim.sub', true), '')::uuid
     and u.ativo
     and u.status = 'ativo'
   order by coalesce(e.nome_fantasia, e.razao_social), ue.empresa_id
@@ -196,8 +196,8 @@ as $function$
    and ((p.empresa_id is null and p.is_system) or p.empresa_id = ue.empresa_id)
   left join public.perfil_permissoes pp on pp.perfil_id = p.id
   left join public.permissoes pm on pm.id = pp.permissao_id
-  where (select auth.uid()) is not null
-    and u.id = (select auth.uid())
+  where nullif(current_setting('request.jwt.claim.sub', true), '')::uuid is not null
+    and u.id = nullif(current_setting('request.jwt.claim.sub', true), '')::uuid
     and u.ativo
     and u.status = 'ativo'
   group by u.id, ue.id, e.nome_fantasia, e.razao_social, un.nome
