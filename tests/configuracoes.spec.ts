@@ -18,6 +18,7 @@ const allPermissions = [
 const context: MeuContexto = { usuario_id: userId, nome: 'Ana Qualidade', email: 'ana@example.test', ativo: true, status: 'ativo', empresa_id: companyId, nome_fantasia: 'Empresa de teste', razao_social: 'Empresa de teste', unidade_id: unitId, unidade_nome: 'Unidade Principal', perfis: ['Administrador'], permissoes: allPermissions }
 const baseUser = { id: userId, nome: 'Ana Qualidade', email: 'ana@example.test', empresa_id: companyId, unidade_id: unitId, status: 'ativo', ativo: true, created_at: '2026-09-15T12:00:00Z' }
 const profiles = ['Administrador', 'Responsável Técnico', 'Qualidade', 'Supervisor', 'Operador', 'Auditor', 'Consulta'].map((nome, index) => ({ id: `40000000-0000-0000-0000-${String(index + 1).padStart(12, '0')}`, empresa_id: null, nome, descricao: `Perfil ${nome}`, is_system: true, ativo: true }))
+const authBootstrapTables = new Set(['v_meu_contexto', 'meus_vinculos', 'meu_contexto_empresa'])
 
 async function setup(page: Page, permissions = allPermissions, options: { empty?: boolean; pending?: boolean; colleague?: boolean; fail?: boolean; delay?: number } = {}) {
   const errors: string[] = []
@@ -76,7 +77,7 @@ test('administrador mantém todos os módulos e navega por usuários e perfis', 
   await expect(page.getByRole('dialog').getByRole('checkbox', { name: /Aprovar/ })).not.toBeChecked()
   await expect(page.getByRole('button', { name: 'Salvar permissões' })).toBeDisabled()
   expect(result.errors).toEqual([])
-  expect(result.requests.every(request => request.method === 'GET')).toBe(true)
+  expect(result.requests.filter(request => !authBootstrapTables.has(request.table)).every(request => request.method === 'GET')).toBe(true)
   expect(result.requests.filter(request => request.table === 'usuarios').every(request => new URL(request.url).searchParams.get('empresa_id') === `eq.${companyId}`)).toBe(true)
 })
 
@@ -104,7 +105,7 @@ test('visibilidade não concede administração, nem por URL direta', async ({ p
   await expect(page.getByRole('navigation', { name: 'Seções de configurações' }).getByRole('button')).toHaveCount(1)
   await page.goto('/configuracoes?secao=perfis')
   await expect(page.getByRole('heading', { name: 'Acesso não autorizado' })).toBeVisible()
-  expect(result.requests.filter(request => request.table !== 'v_meu_contexto')).toEqual([])
+  expect(result.requests.filter(request => !authBootstrapTables.has(request.table))).toEqual([])
 })
 
 test('sem configuracoes.visualizar a rota e o menu são bloqueados', async ({ page }) => {
@@ -112,7 +113,7 @@ test('sem configuracoes.visualizar a rota e o menu são bloqueados', async ({ pa
   await page.goto('/configuracoes?secao=usuarios')
   await expect(page).toHaveURL(/\/dashboard$/)
   await expect(page.locator('.desktop-sidebar').getByRole('link', { name: 'Configurações' })).toHaveCount(0)
-  expect(result.requests.filter(request => request.table !== 'v_meu_contexto')).toEqual([])
+  expect(result.requests.filter(request => !authBootstrapTables.has(request.table))).toEqual([])
 })
 
 test('permissões de usuários e perfis são independentes', async ({ page }) => {
