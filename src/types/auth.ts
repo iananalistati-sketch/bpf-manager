@@ -14,3 +14,20 @@ export interface MeuContexto {
   perfis: string[] | null
   permissoes: string[] | null
 }
+
+export interface VinculoEmpresa {
+  membership_id: string
+  empresa_id: string
+  nome_fantasia: string | null
+  razao_social: string | null
+  unidade_id: string | null
+  unidade_nome: string | null
+  status: UsuarioStatus
+  is_owner: boolean
+}
+
+export interface MeuContextoEmpresa extends MeuContexto {
+  membership_id: string
+  empresa_id: string
+  is_owner: boolean
+}
