@@ -91,7 +91,6 @@ $block$;
 
 reset role;
 
--- Membership bloqueado deixa de ser contexto operacional.
 update public.usuario_empresas
 set status = 'bloqueado'
 where id = 'a6000000-0000-0000-0000-000000000002';
@@ -118,7 +117,6 @@ $block$;
 
 reset role;
 
--- Identidade global inativa invalida todos os tenants.
 update public.usuarios
 set ativo = false, status = 'inativo'
 where id = 'a3000000-0000-0000-0000-000000000001';
@@ -138,20 +136,19 @@ end
 $block$;
 
 reset role;
-set local role anon;
 
+-- O harness PGlite nao concede ao deployer capacidade de SET ROLE anon.
+-- Verificamos a ACL diretamente, que e o contrato de seguranca relevante.
 do $block$
 begin
-  begin
-    perform * from public.meus_vinculos();
-    raise exception 'expected anon execute rejection';
-  exception
-    when insufficient_privilege then null;
-  end;
+  if has_function_privilege('anon', 'public.meus_vinculos()', 'EXECUTE') then
+    raise exception 'anon unexpectedly has EXECUTE on public.meus_vinculos()';
+  end if;
+  if has_function_privilege('anon', 'public.meu_contexto_empresa(uuid)', 'EXECUTE') then
+    raise exception 'anon unexpectedly has EXECUTE on public.meu_contexto_empresa(uuid)';
+  end if;
 end
 $block$;
-
-reset role;
 
 select 'PASS: tenant context validates active memberships, isolates RBAC and rejects cross-tenant spoofing' as result;
 
