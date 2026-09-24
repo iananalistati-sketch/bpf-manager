@@ -1,40 +1,95 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import type { Session } from '@supabase/supabase-js'
 import { supabase, supabaseConfigError } from '../lib/supabase'
-import type { MeuContexto } from '../types/auth'
+import type { MeuContexto, MeuContextoEmpresa, VinculoEmpresa } from '../types/auth'
 import { AuthContext, type AuthContextValue } from '../lib/authContext'
+
+const tenantStorageKey = (userId: string) => `bpf-manager:empresa-ativa:${userId}`
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null)
   const [contexto, setContexto] = useState<MeuContexto | null>(null)
+  const [vinculos, setVinculos] = useState<VinculoEmpresa[]>([])
+  const [empresaAtivaId, setEmpresaAtivaId] = useState<string | null>(null)
   const [loading, setLoading] = useState(!supabaseConfigError)
   const [contextoError, setContextoError] = useState<string | null>(supabaseConfigError)
+
+  const loadLegacyContexto = async () => {
+    const { data, error } = await supabase
+      .from('v_meu_contexto')
+      .select('*')
+      .maybeSingle()
+
+    if (error) return { contexto: null as MeuContexto | null, error }
+    return { contexto: (data as MeuContexto | null) ?? null, error: null }
+  }
+
+  const loadTenantContexto = async (empresaId: string) => {
+    const { data, error } = await supabase
+      .rpc('meu_contexto_empresa', { p_empresa_id: empresaId })
+      .maybeSingle()
+
+    if (error || !data) return { contexto: null as MeuContextoEmpresa | null, error }
+    return { contexto: data as MeuContextoEmpresa, error: null }
+  }
 
   const loadContexto = async (activeSession: Session | null) => {
     if (supabaseConfigError) {
       setContexto(null)
+      setVinculos([])
+      setEmpresaAtivaId(null)
       setContextoError(supabaseConfigError)
       return
     }
 
     if (!activeSession) {
       setContexto(null)
+      setVinculos([])
+      setEmpresaAtivaId(null)
       setContextoError(null)
       return
     }
 
-    const { data, error } = await supabase
-      .from('v_meu_contexto')
-      .select('*')
-      .maybeSingle()
+    const legacy = await loadLegacyContexto()
+    const { data: vinculosData, error: vinculosError } = await supabase.rpc('meus_vinculos')
 
-    if (error) {
-      setContexto(null)
-      setContextoError('Não foi possível carregar seu contexto de acesso.')
+    if (vinculosError) {
+      setVinculos([])
+      setEmpresaAtivaId(legacy.contexto?.empresa_id ?? null)
+      setContexto(legacy.contexto)
+      setContextoError(legacy.error ? 'Não foi possível carregar seu contexto de acesso.' : null)
       return
     }
 
-    setContexto((data as MeuContexto | null) ?? null)
+    const nextVinculos = Array.isArray(vinculosData) ? vinculosData as VinculoEmpresa[] : []
+    setVinculos(nextVinculos)
+
+    if (nextVinculos.length === 0) {
+      setEmpresaAtivaId(legacy.contexto?.empresa_id ?? null)
+      setContexto(legacy.contexto)
+      setContextoError(legacy.error ? 'Não foi possível carregar seu contexto de acesso.' : null)
+      return
+    }
+
+    const savedEmpresaId = window.localStorage.getItem(tenantStorageKey(activeSession.user.id))
+    const legacyEmpresaId = legacy.contexto?.empresa_id ?? null
+    const empresaId = nextVinculos.some(v => v.empresa_id === savedEmpresaId)
+      ? savedEmpresaId!
+      : nextVinculos.some(v => v.empresa_id === legacyEmpresaId)
+        ? legacyEmpresaId!
+        : nextVinculos[0].empresa_id
+
+    const tenant = await loadTenantContexto(empresaId)
+    if (!tenant.contexto) {
+      setContexto(null)
+      setEmpresaAtivaId(null)
+      setContextoError('Não foi possível validar a empresa ativa para sua sessão.')
+      return
+    }
+
+    window.localStorage.setItem(tenantStorageKey(activeSession.user.id), empresaId)
+    setEmpresaAtivaId(empresaId)
+    setContexto(tenant.contexto)
     setContextoError(null)
   }
 
@@ -69,6 +124,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const value = useMemo<AuthContextValue>(() => ({
     session,
     contexto,
+    vinculos,
+    empresaAtivaId,
     loading,
     contextoError,
     signIn: async (email, password) => {
@@ -114,7 +171,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await loadContexto(session)
       setLoading(false)
     },
-  }), [session, contexto, loading, contextoError])
+    trocarEmpresa: async (empresaId) => {
+      if (!session) return 'Sua sessão não está disponível.'
+      if (!vinculos.some(v => v.empresa_id === empresaId)) return 'Empresa não autorizada para este usuário.'
+
+      setLoading(true)
+      try {
+        const tenant = await loadTenantContexto(empresaId)
+        if (!tenant.contexto) return 'Não foi possível validar o acesso à empresa selecionada.'
+        window.localStorage.setItem(tenantStorageKey(session.user.id), empresaId)
+        setEmpresaAtivaId(empresaId)
+        setContexto(tenant.contexto)
+        setContextoError(null)
+        return null
+      } finally {
+        setLoading(false)
+      }
+    },
+  }), [session, contexto, vinculos, empresaAtivaId, loading, contextoError])
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }
