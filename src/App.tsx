@@ -11,6 +11,7 @@ import { ResetPasswordPage } from './pages/ResetPasswordPage'
 import { navigationGroups } from './lib/navigation'
 import './App.css'
 import './auth.css'
+import './tenant.css'
 
 const ConfiguracoesPage = lazy(() => import('./modules/configuracoes/pages/ConfiguracoesPage')
   .then(module => ({ default: module.ConfiguracoesPage })))
