@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import type { Session } from '@supabase/supabase-js'
 import { supabase, supabaseConfigError } from '../lib/supabase'
 import type { MeuContexto, MeuContextoEmpresa, VinculoEmpresa } from '../types/auth'
@@ -14,7 +14,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(!supabaseConfigError)
   const [contextoError, setContextoError] = useState<string | null>(supabaseConfigError)
 
-  const loadLegacyContexto = async () => {
+  const loadLegacyContexto = useCallback(async () => {
     const { data, error } = await supabase
       .from('v_meu_contexto')
       .select('*')
@@ -22,18 +22,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     if (error) return { contexto: null as MeuContexto | null, error }
     return { contexto: (data as MeuContexto | null) ?? null, error: null }
-  }
+  }, [])
 
-  const loadTenantContexto = async (empresaId: string) => {
+  const loadTenantContexto = useCallback(async (empresaId: string) => {
     const { data, error } = await supabase
       .rpc('meu_contexto_empresa', { p_empresa_id: empresaId })
       .maybeSingle()
 
     if (error || !data) return { contexto: null as MeuContextoEmpresa | null, error }
     return { contexto: data as MeuContextoEmpresa, error: null }
-  }
+  }, [])
 
-  const loadContexto = async (activeSession: Session | null) => {
+  const loadContexto = useCallback(async (activeSession: Session | null) => {
     if (supabaseConfigError) {
       setContexto(null)
       setVinculos([])
@@ -91,7 +91,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setEmpresaAtivaId(empresaId)
     setContexto(tenant.contexto)
     setContextoError(null)
-  }
+  }, [loadLegacyContexto, loadTenantContexto])
 
   useEffect(() => {
     if (supabaseConfigError) return
@@ -119,7 +119,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     })
 
     return () => subscription.unsubscribe()
-  }, [])
+  }, [loadContexto])
 
   const value = useMemo<AuthContextValue>(() => ({
     session,
@@ -188,7 +188,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setLoading(false)
       }
     },
-  }), [session, contexto, vinculos, empresaAtivaId, loading, contextoError])
+  }), [session, contexto, vinculos, empresaAtivaId, loading, contextoError, loadContexto, loadTenantContexto])
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }
