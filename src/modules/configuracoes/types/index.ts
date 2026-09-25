@@ -54,5 +54,28 @@ export interface AuditoriaEvento {
   created_at: string
 }
 export interface AuditoriaData { eventos: AuditoriaEvento[]; usuarios: Pick<Usuario, 'id' | 'nome' | 'email'>[] }
+export interface PlanoResumo {
+  plano_id: string | null
+  plano_codigo: string | null
+  plano_nome: string | null
+  origem: string | null
+  usuarios_ativos: number
+  usuarios_ativos_max: number | null
+  unidades_ativas: number
+  unidades_max: number | null
+}
+export interface PlanoEntitlement {
+  plano_id: string
+  plano_codigo: string
+  plano_nome: string
+  plano_ativo: boolean
+  origem: string
+  chave: string | null
+  tipo: 'booleano' | 'inteiro' | 'texto' | null
+  valor_booleano: boolean | null
+  valor_inteiro: number | null
+  valor_texto: string | null
+}
+export interface PlanoData { resumo: PlanoResumo; entitlements: PlanoEntitlement[] }
 export interface ReadScope { usuarioId: string; empresaId: string }
 export interface UsuarioFilters { busca: string; status: string; unidade: string; perfil: string }
