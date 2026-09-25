@@ -3,7 +3,7 @@ import { hasPermission } from '../../../lib/permissions'
 import type { MeuContexto, UsuarioStatus } from '../../../types/auth'
 import type {
   AuditoriaData, AuditoriaEvento, Empresa, EstruturaData, Perfil, PerfilPermissao, PerfisData,
-  Permissao, ReadScope, Setor, Unidade, Usuario, UsuarioPerfil, UsuariosData,
+  Permissao, PlanoData, PlanoEntitlement, PlanoResumo, ReadScope, Setor, Unidade, Usuario, UsuarioPerfil, UsuariosData,
 } from '../types'
 
 const PAGE_SIZE = 500
@@ -38,7 +38,8 @@ function mutationError(message?: string) {
   const text = message ?? ''
   const known = [
     'Sem permissao para administrar usuarios', 'Sem permissao para gerir perfis de usuarios',
-    'Sem permissao para convidar usuarios', 'Sem permissao para gerenciar estrutura',
+    'Sem permissao para convidar usuarios', 'Sem permissao para convidar usuarios no tenant selecionado',
+    'Sem permissao para gerenciar estrutura', 'Limite de usuarios ativos do plano atingido',
     'Usuario pendente exige fluxo de vinculacao/aprovacao dedicado',
     'Nao e permitido inativar ou bloquear o proprio usuario',
     'Nao e permitido alterar o proprio perfil administrativo',
@@ -65,15 +66,37 @@ function mutationError(message?: string) {
     .replaceAll('atribuido', 'atribuído').replaceAll('Razao', 'Razão')
 }
 
+async function edgeFunctionMessage(error: unknown) {
+  const response = (error as { context?: Response } | null)?.context
+  if (!response) return null
+  try {
+    const payload = await response.clone().json() as { error?: unknown }
+    return typeof payload.error === 'string' ? payload.error : null
+  } catch {
+    return null
+  }
+}
+
 export function createConfiguracoesService(client: SupabaseClient) {
   async function authorize(scope: ReadScope, permission: string, signal: AbortSignal) {
-    const { data, error } = await client.from('v_meu_contexto').select('*').abortSignal(signal).maybeSingle<MeuContexto>()
-    if (error) throw new Error('Não foi possível validar seu acesso. Atualize a sessão e tente novamente.')
+    validateUuid(scope.empresaId, 'Empresa de acesso')
+
+    const tenantResult = await client
+      .rpc('meu_contexto_empresa', { p_empresa_id: scope.empresaId })
+      .abortSignal(signal)
+      .maybeSingle<MeuContexto>()
+
+    let data = tenantResult.data
+    if (tenantResult.error || !data) {
+      const legacy = await client.from('v_meu_contexto').select('*').abortSignal(signal).maybeSingle<MeuContexto>()
+      if (legacy.error) throw new Error('Não foi possível validar seu acesso. Atualize a sessão e tente novamente.')
+      data = legacy.data
+    }
+
     if (!data || data.usuario_id !== scope.usuarioId || data.empresa_id !== scope.empresaId
       || !hasPermission(data, 'configuracoes.visualizar') || !hasPermission(data, permission)) {
       throw new Error('Seu acesso a esta área não está mais disponível. Atualize a sessão.')
     }
-    validateUuid(scope.empresaId, 'Empresa de acesso')
     return data
   }
   async function authorizeMutation(scope: ReadScope, permission: string) {
@@ -155,6 +178,17 @@ export function createConfiguracoesService(client: SupabaseClient) {
       return { eventos, usuarios }
     },
 
+    async plano(scope: ReadScope, signal: AbortSignal): Promise<PlanoData> {
+      await authorize(scope, 'configuracoes.visualizar', signal)
+      const [resumoResult, entitlementsResult] = await Promise.all([
+        client.rpc('meu_plano_resumo', { p_empresa_id: scope.empresaId }).abortSignal(signal).maybeSingle<PlanoResumo>(),
+        client.rpc('meu_plano_entitlements', { p_empresa_id: scope.empresaId }).abortSignal(signal).returns<PlanoEntitlement[]>(),
+      ])
+      if (resumoResult.error || !resumoResult.data) throw new Error('Não foi possível carregar o resumo comercial da empresa.')
+      if (entitlementsResult.error || !entitlementsResult.data) throw new Error('Não foi possível carregar os limites do plano.')
+      return { resumo: resumoResult.data, entitlements: entitlementsResult.data }
+    },
+
     async alterarStatus(scope: ReadScope, usuarioId: string, status: Exclude<UsuarioStatus, 'pendente'>, justificativa: string) {
       validateUuid(usuarioId, 'Usuário'); validateJustification(justificativa); await authorizeMutation(scope, 'usuarios.gerenciar')
       const { error } = await client.rpc('admin_usuario_alterar_status', { p_usuario_id: usuarioId, p_status: status, p_justificativa: justificativa.trim() })
@@ -177,12 +211,16 @@ export function createConfiguracoesService(client: SupabaseClient) {
       if (!input.perfilIds.length) throw new Error('Selecione ao menos um perfil.'); input.perfilIds.forEach(id => validateUuid(id, 'Perfil'))
       validateJustification(input.justificativa); await authorizeMutation(scope, 'usuarios.convidar')
       const { data, error } = await client.functions.invoke('admin-invite-user', { body: {
+        empresaId: scope.empresaId,
         email: input.email.trim().toLowerCase(), nome: input.nome.trim(), unidadeId: input.unidadeId,
         perfilIds: input.perfilIds, justificativa: input.justificativa.trim(),
       } })
-      if (error) throw new Error('Não foi possível enviar o convite. Verifique se o e-mail já possui cadastro e tente novamente.')
+      if (error) {
+        const detail = await edgeFunctionMessage(error)
+        throw new Error(detail ?? 'Não foi possível enviar o convite. Verifique a sessão e tente novamente.')
+      }
       if (data?.error) throw new Error(typeof data.error === 'string' ? data.error : 'Não foi possível concluir o convite.')
-      return data as { userId: string; email: string }
+      return data as { userId: string; email: string; empresaId: string }
     },
 
     async perfilCriar(scope: ReadScope, nome: string, descricao: string, permissaoIds: string[], justificativa: string) {
