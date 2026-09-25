@@ -17,8 +17,9 @@ const migrations = [
   'supabase/migrations/20260923143000_membership_compatibility_foundation.sql',
   'supabase/migrations/20260923150000_tenant_context_contract.sql',
   'supabase/migrations/20260925100000_plan_entitlements_foundation.sql',
+  'supabase/migrations/20260925120000_admin_invite_membership_bridge.sql',
 ]
-const membershipMigration = migrations.at(-3)
+const membershipMigration = migrations.at(-4)
 const testSuites = [
   'supabase/tests/administrative_user_read.sql',
   'supabase/tests/admin_user_commands.sql',
@@ -28,6 +29,7 @@ const testSuites = [
   'supabase/tests/membership_compatibility.sql',
   'supabase/tests/tenant_context_contract.sql',
   'supabase/tests/plan_entitlements_foundation.sql',
+  'supabase/tests/admin_invite_membership_bridge.sql',
 ]
 
 const db = await PGlite.create()
