@@ -26,8 +26,9 @@ const migrations = [
   'supabase/migrations/20260925123500_make_invite_legacy_profile_policy_nonrecursive.sql',
   'supabase/migrations/20260925124000_simplify_invite_legacy_profile_rls.sql',
   'supabase/migrations/20260925124500_stop_duplicating_invite_auth_in_usuario_perfis_rls.sql',
+  'supabase/migrations/20260925125000_bridge_legacy_profile_sync_outside_rls.sql',
 ]
-const membershipMigration = migrations.at(-12)
+const membershipMigration = migrations.at(-13)
 const testSuites = [
   'supabase/tests/administrative_user_read.sql',
   'supabase/tests/admin_user_commands.sql',
