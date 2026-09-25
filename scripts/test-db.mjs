@@ -19,8 +19,9 @@ const migrations = [
   'supabase/migrations/20260925100000_plan_entitlements_foundation.sql',
   'supabase/migrations/20260925120000_admin_invite_membership_bridge.sql',
   'supabase/migrations/20260925121000_fix_plan_summary_consumption.sql',
+  'supabase/migrations/20260925121500_harden_tenant_invite_actor_read.sql',
 ]
-const membershipMigration = migrations.at(-5)
+const membershipMigration = migrations.at(-6)
 const testSuites = [
   'supabase/tests/administrative_user_read.sql',
   'supabase/tests/admin_user_commands.sql',
