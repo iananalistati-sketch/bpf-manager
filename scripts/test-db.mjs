@@ -22,8 +22,9 @@ const migrations = [
   'supabase/migrations/20260925121500_harden_tenant_invite_actor_read.sql',
   'supabase/migrations/20260925122000_fix_tenant_invite_target_visibility.sql',
   'supabase/migrations/20260925122500_harden_tenant_invite_membership_upsert.sql',
+  'supabase/migrations/20260925123000_fix_tenant_invite_legacy_profile_insert.sql',
 ]
-const membershipMigration = migrations.at(-8)
+const membershipMigration = migrations.at(-9)
 const testSuites = [
   'supabase/tests/administrative_user_read.sql',
   'supabase/tests/admin_user_commands.sql',
