@@ -108,3 +108,4 @@ export const useUsuarios = () => useConfiguracoesQuery('usuarios.gerenciar', ser
 export const usePerfis = () => useConfiguracoesQuery('perfis.gerenciar', service.perfis)
 export const useEstrutura = () => useConfiguracoesQuery('estrutura.gerenciar', service.estrutura)
 export const useAuditoria = () => useConfiguracoesQuery('auditoria.visualizar', service.auditoria)
+export const usePlano = () => useConfiguracoesQuery('configuracoes.visualizar', service.plano)
