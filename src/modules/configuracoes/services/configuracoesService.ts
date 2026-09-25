@@ -91,10 +91,14 @@ export function createConfiguracoesService(client: SupabaseClient) {
     },
     async plano(scope: ReadScope, signal: AbortSignal): Promise<PlanoData> {
       await authorize(scope,'configuracoes.visualizar',signal)
-      const [resumoResult,entitlementsResult]=await Promise.all([client.rpc('meu_plano_resumo',{p_empresa_id:scope.empresaId}).abortSignal(signal).maybeSingle<PlanoResumo>(),client.rpc('meu_plano_entitlements',{p_empresa_id:scope.empresaId}).abortSignal(signal).returns<PlanoEntitlement[]>()])
+      const [resumoResult,entitlementsResult]=await Promise.all([
+        client.rpc('meu_plano_resumo',{p_empresa_id:scope.empresaId}).abortSignal(signal).maybeSingle<PlanoResumo>(),
+        client.rpc('meu_plano_entitlements',{p_empresa_id:scope.empresaId}).abortSignal(signal),
+      ])
       if(resumoResult.error||!resumoResult.data) throw new Error('Não foi possível carregar o resumo comercial da empresa.')
-      if(entitlementsResult.error||!entitlementsResult.data) throw new Error('Não foi possível carregar os limites do plano.')
-      return {resumo:resumoResult.data,entitlements:entitlementsResult.data}
+      if(entitlementsResult.error||!Array.isArray(entitlementsResult.data)) throw new Error('Não foi possível carregar os limites do plano.')
+      const entitlements = entitlementsResult.data as PlanoEntitlement[]
+      return {resumo:resumoResult.data,entitlements}
     },
     async alterarStatus(scope: ReadScope, usuarioId: string, status: Exclude<UsuarioStatus,'pendente'>, justificativa: string) { validateUuid(usuarioId,'Usuário');validateJustification(justificativa);await authorizeMutation(scope,'usuarios.gerenciar');const {error}=await client.rpc('admin_usuario_alterar_status',{p_usuario_id:usuarioId,p_status:status,p_justificativa:justificativa.trim()});if(error) throw new Error(mutationError(error.message)) },
     async alterarUnidade(scope: ReadScope, usuarioId: string, unidadeId: string|null, justificativa: string) { validateUuid(usuarioId,'Usuário');if(unidadeId)validateUuid(unidadeId,'Unidade');validateJustification(justificativa);await authorizeMutation(scope,'usuarios.gerenciar');const {error}=await client.rpc('admin_usuario_alterar_unidade',{p_usuario_id:usuarioId,p_unidade_id:unidadeId,p_justificativa:justificativa.trim()});if(error) throw new Error(mutationError(error.message)) },
