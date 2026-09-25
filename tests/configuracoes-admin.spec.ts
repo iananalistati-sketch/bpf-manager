@@ -22,8 +22,16 @@ async function setup(page: Page) {
     const request = route.request()
     const url = new URL(request.url())
     requests.push({ path: url.pathname, method: request.method(), body: request.postData() })
-    if (url.pathname.startsWith('/functions/v1/')) return route.fulfill({ status: 200, json: { userId: '90000000-0000-0000-0000-000000000001', email: 'novo@example.test' } })
+    if (url.pathname.startsWith('/functions/v1/')) return route.fulfill({ status: 200, json: { userId: '90000000-0000-0000-0000-000000000001', email: 'novo@example.test', empresaId: companyId } })
     if (!url.pathname.startsWith('/rest/v1/')) return route.fulfill({ status: 200, json: {} })
+    if (url.pathname.endsWith('/rpc/meu_plano_resumo')) return route.fulfill({ status: 200, json: [{
+      plano_id: '80000000-0000-0000-0000-000000000001', plano_codigo: 'basic', plano_nome: 'Basic', origem: 'manual',
+      usuarios_ativos: 1, usuarios_ativos_max: 10, unidades_ativas: 1, unidades_max: 1,
+    }], headers: { 'content-type': 'application/json' } })
+    if (url.pathname.endsWith('/rpc/meu_plano_entitlements')) return route.fulfill({ status: 200, json: [
+      { plano_id: '80000000-0000-0000-0000-000000000001', plano_codigo: 'basic', plano_nome: 'Basic', plano_ativo: true, origem: 'manual', chave: 'usuarios_ativos.max', tipo: 'inteiro', valor_booleano: null, valor_inteiro: 10, valor_texto: null },
+      { plano_id: '80000000-0000-0000-0000-000000000001', plano_codigo: 'basic', plano_nome: 'Basic', plano_ativo: true, origem: 'manual', chave: 'unidades.max', tipo: 'inteiro', valor_booleano: null, valor_inteiro: 1, valor_texto: null },
+    ], headers: { 'content-type': 'application/json' } })
     if (url.pathname.includes('/rpc/')) return route.fulfill({ status: 200, json: null, headers: { 'content-type': 'application/json' } })
     const table = url.pathname.split('/').pop() ?? ''
     const data: Record<string, unknown[]> = {
@@ -49,7 +57,7 @@ async function setup(page: Page) {
   return requests
 }
 
-test('administrador pode abrir convite e envia pela Edge Function', async ({ page }) => {
+test('administrador pode abrir convite e envia tenant ativo pela Edge Function', async ({ page }) => {
   const requests = await setup(page)
   await page.goto('/configuracoes?secao=usuarios')
   await page.getByRole('button', { name: 'Convidar usuário' }).click()
@@ -60,7 +68,20 @@ test('administrador pode abrir convite e envia pela Edge Function', async ({ pag
   await dialog.getByLabel('Justificativa').fill('Convite para equipe QA')
   await dialog.getByRole('button', { name: 'Enviar convite' }).click()
   await expect(dialog).toHaveCount(0)
-  expect(requests.some(item => item.path.endsWith('/functions/v1/admin-invite-user') && item.method === 'POST')).toBe(true)
+  const invite = requests.find(item => item.path.endsWith('/functions/v1/admin-invite-user') && item.method === 'POST')
+  expect(invite).toBeTruthy()
+  expect(invite?.body).toContain(companyId)
+})
+
+test('plano e uso ficam visíveis com limites e consumo da empresa', async ({ page }) => {
+  const requests = await setup(page)
+  await page.goto('/configuracoes?secao=plano')
+  await expect(page.getByRole('heading', { name: 'Plano e uso' })).toBeVisible()
+  await expect(page.getByText('Basic', { exact: true })).toBeVisible()
+  await expect(page.getByText('1 / 10')).toBeVisible()
+  await expect(page.getByText('1 / 1')).toBeVisible()
+  expect(requests.some(item => item.path.endsWith('/rest/v1/rpc/meu_plano_resumo'))).toBe(true)
+  expect(requests.some(item => item.path.endsWith('/rest/v1/rpc/meu_plano_entitlements'))).toBe(true)
 })
 
 test('perfil customizado usa RPC e perfil de sistema permanece somente leitura', async ({ page }) => {
