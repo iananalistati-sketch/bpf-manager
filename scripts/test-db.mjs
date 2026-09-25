@@ -16,8 +16,9 @@ const migrations = [
   'supabase/migrations/20260918134800_fix_complete_admin_writer_grants.sql',
   'supabase/migrations/20260923143000_membership_compatibility_foundation.sql',
   'supabase/migrations/20260923150000_tenant_context_contract.sql',
+  'supabase/migrations/20260925100000_plan_entitlements_foundation.sql',
 ]
-const membershipMigration = migrations.at(-2)
+const membershipMigration = migrations.at(-3)
 const testSuites = [
   'supabase/tests/administrative_user_read.sql',
   'supabase/tests/admin_user_commands.sql',
@@ -26,6 +27,7 @@ const testSuites = [
   'supabase/tests/structure_admin_paths.sql',
   'supabase/tests/membership_compatibility.sql',
   'supabase/tests/tenant_context_contract.sql',
+  'supabase/tests/plan_entitlements_foundation.sql',
 ]
 
 const db = await PGlite.create()
@@ -112,6 +114,8 @@ try {
   if (audits[0].count !== 0) throw new Error('Audit test fixtures were not rolled back')
   const { rows: memberships } = await db.query('SELECT count(*)::int AS count FROM public.usuario_empresas')
   if (memberships[0].count !== 0) throw new Error('Membership test fixtures were not rolled back')
+  const { rows: companyPlans } = await db.query('SELECT count(*)::int AS count FROM public.empresa_planos')
+  if (companyPlans[0].count !== 0) throw new Error('Plan test fixtures were not rolled back')
   console.log('PASS: fixtures rolled back; remote Supabase was not accessed')
 } catch (error) {
   console.error(`Database test failed: ${error.message}`)
