@@ -21,7 +21,8 @@ A comunicação ocorre por um ciclo explícito de **entrada → análise especia
 - define arquitetura e ordem de implementação;
 - implementa/consolida a mudança;
 - distribui achados cruzados aos agentes afetados;
-- decide se o gate pode avançar.
+- decide se o gate pode avançar;
+- reduz checkpoints repetidos ao usuário, consolidando correções previsíveis antes de pedir nova execução.
 
 ### Especialistas consultivos
 - Produto/BPF;
@@ -74,10 +75,10 @@ Produto, Dados, Segurança, Frontend e Governança retornaram recomendações; p
 O Orquestrador implementou uma única solução coerente, sem frentes independentes concorrentes.
 
 ### Gate 3 — Banco/Migrations
-Agente 08 revisou cadeia acumulada, roles, grants, owners, RLS, DDL, fixture e estado final esperado.
+Agente 08 revisou cadeia acumulada, roles, grants, owners, RLS, DDL, fixture e estado final esperado. Para toda mutation nova deve existir revisão explícita da transição `OLD -> NEW`, incluindo `USING`, `WITH CHECK`, triggers, tabelas auxiliares, grants e auditoria. Aplicar a migration sem erro não basta.
 
 ### Gate 4 — Segurança adversarial
-Agente 09 tentou bypass, cross-tenant, autoelevação e chamadas diretas de backend. Em fluxos SaaS também deve testar multi-membership, tenant ativo adulterado, trial isolado, entitlement bypass e provisionamento repetido.
+Agente 09 tentou bypass, cross-tenant, autoelevação e chamadas diretas de backend. Toda RPC de escrita deve incluir cenário válido, tenant adulterado, alvo adulterado, permissão removida, estado inválido e verificação de rollback/ausência de estado parcial. Em fluxos SaaS também deve testar multi-membership, tenant ativo adulterado, trial isolado, entitlement bypass e provisionamento repetido.
 
 ### Gate 5 — Validação integrada
 Agente 07 revisou contratos entre banco, frontend, testes e documentação e confirmou ausência de bloqueadores conhecidos.
@@ -86,7 +87,7 @@ Agente 07 revisou contratos entre banco, frontend, testes e documentação e con
 O comando unificado `npm.cmd run validate` deve passar. Ele executa, em sequência, `test:db`, `build`, `lint` e `test:e2e`. O `test:db` já inclui o preflight `validate:db-sources` antes dos testes funcionais de banco.
 
 ### Gate 7 — Checkpoint do usuário
-Somente após os gates anteriores o usuário recebe comandos de validação local/visual.
+Somente após os gates anteriores o usuário recebe comandos de validação local/visual. Para mudanças críticas de banco, Agentes 08 e 09 precisam ter retornado `STATUS: APROVADO` explicitamente.
 
 ### Gate 8 — Deploy remoto
 Migrations/funções são aplicadas remotamente apenas após checkpoint verde; depois são executadas verificações remotas e advisors.
@@ -99,9 +100,32 @@ Qualquer agente pode marcar um achado como `BLOQUEADOR`. Nesse caso:
 2. identifica agentes impactados;
 3. compartilha o achado com esses agentes;
 4. consolida uma correção única;
-5. repete os gates afetados.
+5. revisa a cadeia inteira da operação em busca do próximo ponto de falha previsível;
+6. repete os gates afetados;
+7. só então solicita novo checkpoint.
 
 O usuário não deve ser usado como executor de descoberta de erros que poderiam ser encontrados nos gates internos.
+
+## Regra de checkpoint consolidado
+
+Em projetos grandes, o custo de pequenas paradas repetidas deve ser evitado. Antes de pedir novo `git pull` + `npm.cmd run validate`, o Orquestrador deve consolidar o maior número razoável de correções relacionadas ao mesmo fluxo.
+
+Para uma mutation multi-etapas, a revisão deve caminhar até o fim da transação:
+
+```text
+entrada/autorização
+→ leitura/lock do estado OLD
+→ UPDATE/INSERT/DELETE
+→ RLS do estado NEW
+→ triggers
+→ tabelas de compatibilidade/relacionamento
+→ limites/entitlements
+→ auditoria
+→ retorno ao caller
+→ rollback em falha
+```
+
+Se um erro é encontrado em qualquer ponto, os pontos seguintes devem ser inspecionados antes de devolver a execução ao usuário.
 
 ## Artefatos de coordenação
 
@@ -124,6 +148,7 @@ Uma implantação só é considerada pronta quando:
 - autorização é imposta no backend;
 - auditoria aplicável está coberta;
 - estado acumulado das migrations é coerente;
+- mutations críticas foram revisadas como transições completas `OLD -> NEW`;
 - testes antigos foram revisados contra o comportamento novo;
 - não existem bloqueadores dos agentes 07, 08 ou 09;
 - para mudanças SaaS, não existem bloqueadores do Agente 10;
