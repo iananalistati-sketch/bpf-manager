@@ -38,19 +38,17 @@ insert into public.usuario_empresas(id,usuario_id,empresa_id,status,is_owner) va
 insert into public.usuario_empresa_perfis(usuario_empresa_id,perfil_id) values
   ('e6000000-0000-0000-0000-000000000001','e4000000-0000-0000-0000-000000000001');
 
--- Cenário feliz completo: valida autorização, transição RLS OLD->NEW, legado,
--- membership, perfil contextual e auditoria na mesma transação.
-set local role authenticated;
-select set_config('request.jwt.claim.sub','e3000000-0000-0000-0000-000000000001',true);
-
-select public.admin_usuario_vincular_convite_tenant(
+-- Estado final da arquitetura: o convite autenticado antigo foi fechado e a Edge chama
+-- exclusivamente a RPC server-only como service_role, passando explicitamente o ator validado.
+set local role service_role;
+select public.admin_usuario_vincular_convite_server(
+  'e3000000-0000-0000-0000-000000000001',
   'e1000000-0000-0000-0000-000000000002',
   'e3000000-0000-0000-0000-000000000002',
   'e2000000-0000-0000-0000-000000000002',
   array['e4000000-0000-0000-0000-000000000002']::uuid[],
   'Convite tenant B para teste'
 );
-
 reset role;
 
 do $block$
@@ -98,8 +96,7 @@ begin
 end
 $block$;
 
--- Recuperação de estado parcial permitido: membership pendente já existe para o mesmo
--- alvo/tenant; o ON CONFLICT deve ativá-lo sem permitir update genérico de outros vínculos.
+-- Recuperação de membership pendente preexistente para o mesmo alvo/tenant.
 insert into public.usuario_empresas(
   id,usuario_id,empresa_id,unidade_id,status,is_owner,created_by
 ) values (
@@ -109,17 +106,15 @@ insert into public.usuario_empresas(
   null,'pendente',false,null
 );
 
-set local role authenticated;
-select set_config('request.jwt.claim.sub','e3000000-0000-0000-0000-000000000001',true);
-
-select public.admin_usuario_vincular_convite_tenant(
+set local role service_role;
+select public.admin_usuario_vincular_convite_server(
+  'e3000000-0000-0000-0000-000000000001',
   'e1000000-0000-0000-0000-000000000002',
   'e3000000-0000-0000-0000-000000000005',
   'e2000000-0000-0000-0000-000000000002',
   array['e4000000-0000-0000-0000-000000000002']::uuid[],
   'Recupera membership pendente'
 );
-
 reset role;
 
 do $block$
@@ -143,13 +138,12 @@ end
 $block$;
 
 -- Tenant adulterado deve falhar antes de qualquer mutação do alvo.
-set local role authenticated;
-select set_config('request.jwt.claim.sub','e3000000-0000-0000-0000-000000000001',true);
-
+set local role service_role;
 do $block$
 begin
   begin
-    perform public.admin_usuario_vincular_convite_tenant(
+    perform public.admin_usuario_vincular_convite_server(
+      'e3000000-0000-0000-0000-000000000001',
       'e1000000-0000-0000-0000-000000000003',
       'e3000000-0000-0000-0000-000000000003',
       null,
@@ -161,7 +155,6 @@ begin
   end;
 end
 $block$;
-
 reset role;
 
 do $block$
@@ -182,9 +175,7 @@ begin
 end
 $block$;
 
--- Prepara exatamente 10 usuários ativos no Tenant B (ator + dois convites bem-sucedidos + 7 fillers),
--- depois atribui Basic. O 11º convite deve falhar no trigger de limite e toda a RPC deve
--- ser revertida atomicamente, sem legado/membership/perfil/auditoria parciais.
+-- Prepara 10 usuários ativos no Tenant B; o 11º deve falhar pelo limite Basic e rollbackar tudo.
 insert into auth.users(id,email)
 select ('f3000000-0000-0000-0000-' || lpad(i::text,12,'0'))::uuid,
        'tenant-b-fill-' || i || '@example.test'
@@ -201,13 +192,12 @@ insert into public.empresa_planos(empresa_id,plano_id,origem)
 select 'e1000000-0000-0000-0000-000000000002', id, 'manual'
 from public.planos where codigo='basic';
 
-set local role authenticated;
-select set_config('request.jwt.claim.sub','e3000000-0000-0000-0000-000000000001',true);
-
+set local role service_role;
 do $block$
 begin
   begin
-    perform public.admin_usuario_vincular_convite_tenant(
+    perform public.admin_usuario_vincular_convite_server(
+      'e3000000-0000-0000-0000-000000000001',
       'e1000000-0000-0000-0000-000000000002',
       'e3000000-0000-0000-0000-000000000004',
       'e2000000-0000-0000-0000-000000000002',
@@ -220,7 +210,6 @@ begin
   end;
 end
 $block$;
-
 reset role;
 
 do $block$
@@ -255,18 +244,24 @@ begin
 end
 $block$;
 
--- Fronteira pública da RPC.
+-- Fronteira final: somente service_role executa a RPC server-only; o caminho antigo fica fechado.
 do $block$
 begin
-  if has_function_privilege('anon','public.admin_usuario_vincular_convite_tenant(uuid,uuid,uuid,uuid[],text)','EXECUTE') then
-    raise exception 'anon unexpectedly can execute tenant invite RPC';
+  if not has_function_privilege('service_role','public.admin_usuario_vincular_convite_server(uuid,uuid,uuid,uuid,uuid[],text)','EXECUTE') then
+    raise exception 'service_role lost server invite RPC execute';
   end if;
-  if not has_function_privilege('authenticated','public.admin_usuario_vincular_convite_tenant(uuid,uuid,uuid,uuid[],text)','EXECUTE') then
-    raise exception 'authenticated lost tenant invite RPC execute';
+  if has_function_privilege('authenticated','public.admin_usuario_vincular_convite_server(uuid,uuid,uuid,uuid,uuid[],text)','EXECUTE') then
+    raise exception 'authenticated unexpectedly can execute server invite RPC';
+  end if;
+  if has_function_privilege('anon','public.admin_usuario_vincular_convite_server(uuid,uuid,uuid,uuid,uuid[],text)','EXECUTE') then
+    raise exception 'anon unexpectedly can execute server invite RPC';
+  end if;
+  if has_function_privilege('authenticated','public.admin_usuario_vincular_convite_tenant(uuid,uuid,uuid,uuid[],text)','EXECUTE') then
+    raise exception 'legacy authenticated invite RPC unexpectedly remains executable';
   end if;
 end
 $block$;
 
-select 'PASS: tenant-aware invitation covers OLD-to-NEW RLS, membership upsert recovery, legacy/membership sync, audit, cross-tenant rejection and atomic rollback on plan limit' as result;
+select 'PASS: server-only tenant invitation covers membership/profile/audit sync, recovery, cross-tenant rejection, plan rollback and closed legacy surface' as result;
 
 rollback;
