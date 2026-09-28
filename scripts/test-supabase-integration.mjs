@@ -30,8 +30,7 @@ const url = env('BPF_INTEGRATION_SUPABASE_URL')
 const publishableKey = env('BPF_INTEGRATION_PUBLISHABLE_KEY')
 const adminEmail = env('BPF_INTEGRATION_ADMIN_EMAIL')
 const adminPassword = env('BPF_INTEGRATION_ADMIN_PASSWORD')
-const environmentRaw = env('BPF_INTEGRATION_ENVIRONMENT').toLowerCase()
-const environment = environmentRaw === 'production' ? 'official' : environmentRaw
+let environment = env('BPF_INTEGRATION_ENVIRONMENT')
 const allowProduction = env('BPF_INTEGRATION_ALLOW_PRODUCTION', false) === 'YES'
 const allowMutations = env('BPF_INTEGRATION_ALLOW_MUTATIONS', false) === 'YES'
 const serviceRoleKey = env('BPF_INTEGRATION_SERVICE_ROLE_KEY', false)
@@ -39,8 +38,9 @@ const inviteEmail = env('BPF_INTEGRATION_INVITE_EMAIL', false)
 const explicitProfileId = env('BPF_INTEGRATION_PROFILE_ID', false)
 const productionMutationConfirmation = env('BPF_INTEGRATION_PRODUCTION_MUTATION_CONFIRM', false)
 
-if (environmentRaw === 'production') {
-  console.warn('WARN: BPF_INTEGRATION_ENVIRONMENT=production is deprecated; treating it as official. Prefer official.')
+if (environment === 'production') {
+  console.warn('WARN: BPF_INTEGRATION_ENVIRONMENT=production is deprecated; use official.')
+  environment = 'official'
 }
 if (!['homologation', 'official'].includes(environment)) {
   throw new Error('BPF_INTEGRATION_ENVIRONMENT must be homologation or official.')
@@ -65,18 +65,6 @@ const client = createClient(url, publishableKey, { auth: { persistSession: false
 const fail = (message, error) => {
   const detail = error?.message ? `: ${error.message}` : ''
   throw new Error(`${message}${detail}`)
-}
-
-async function functionsErrorDetail(error) {
-  const response = error?.context
-  if (!response || typeof response.clone !== 'function') return error?.message ?? String(error)
-  try {
-    const body = await response.clone().json()
-    const parts = [body?.code, body?.requestId, body?.error].filter(Boolean)
-    return parts.length ? parts.join(' | ') : JSON.stringify(body)
-  } catch {
-    try { return await response.clone().text() } catch { return error?.message ?? String(error) }
-  }
 }
 
 console.log(`Hosted Supabase integration: ${projectRef} (${environment})`)
@@ -116,10 +104,27 @@ try {
     console.log(`SKIP: mutation smoke disabled (${isOfficial ? 'recommended default on official project' : 'set BPF_INTEGRATION_ALLOW_MUTATIONS=YES when needed'})`)
   } else {
     if (!serviceRoleKey) fail('Mutation smoke requires BPF_INTEGRATION_SERVICE_ROLE_KEY')
+    if (serviceRoleKey.startsWith('sb_publishable_') || serviceRoleKey === publishableKey) {
+      fail('BPF_INTEGRATION_SERVICE_ROLE_KEY is a publishable key, not a service_role secret')
+    }
     if (!inviteEmail) fail('Mutation smoke requires BPF_INTEGRATION_INVITE_EMAIL')
     if (inviteEmail.toLowerCase() === adminEmail.toLowerCase()) fail('Invite smoke email must differ from admin email')
 
     const admin = createClient(url, serviceRoleKey, { auth: { persistSession: false, autoRefreshToken: false } })
+
+    // Fail before any mutation if the privileged key is invalid. This prevents an Auth invite
+    // from being created when the harness would be unable to verify/cleanup the smoke user.
+    const { error: serviceRoleProbeError } = await admin
+      .from('perfis')
+      .select('id', { head: true, count: 'exact' })
+      .limit(1)
+    if (serviceRoleProbeError) {
+      if (/invalid api key/i.test(serviceRoleProbeError.message)) {
+        fail('BPF_INTEGRATION_SERVICE_ROLE_KEY is invalid for this Supabase project. Copy the service_role/secret key for the same project; do not use the publishable/anon key')
+      }
+      fail('service_role preflight failed', serviceRoleProbeError)
+    }
+    console.log('PASS: service_role preflight')
 
     let profileId = explicitProfileId
     if (!profileId) {
@@ -135,7 +140,6 @@ try {
     }
     if (!profileId) fail('No valid profile available for invitation smoke')
 
-    console.log(`MUTATION: inviting dedicated smoke account ${inviteEmail} with profile ${profileId}`)
     const { data: invokeData, error: invokeError } = await client.functions.invoke('admin-invite-user', {
       body: {
         empresaId,
@@ -147,42 +151,40 @@ try {
       },
     })
     if (invokeError) {
-      const detail = await functionsErrorDetail(invokeError)
-      throw new Error(`admin-invite-user Edge Function failed: ${detail}`)
+      const body = invokeError.context?.body
+      const code = body?.code ? ` [${body.code}]` : ''
+      const requestId = body?.requestId ? ` requestId=${body.requestId}` : ''
+      const detail = body?.error ?? invokeError.message
+      fail(`admin-invite-user Edge Function failed${code}${requestId}`, { message: detail })
     }
     const userId = invokeData?.userId
-    if (!userId) throw new Error(`Edge Function did not return invited userId. Payload=${JSON.stringify(invokeData)}`)
-    console.log(`PASS: Edge returned userId ${userId}${invokeData?.requestId ? ` requestId=${invokeData.requestId}` : ''}`)
+    if (!userId) fail('Edge Function did not return invited userId')
 
     try {
       const { data: authUser, error: authUserError } = await admin.auth.admin.getUserById(userId)
       if (authUserError || !authUser.user) fail('Invited Auth user was not persisted', authUserError)
-      console.log('PASS: invited Auth user persisted')
 
       const { data: membership, error: membershipError } = await admin
         .from('usuario_empresas').select('id,usuario_id,empresa_id,status')
         .eq('usuario_id', userId).eq('empresa_id', empresaId).maybeSingle()
       if (membershipError || !membership || membership.status !== 'ativo') fail('Invited membership was not persisted', membershipError)
-      console.log('PASS: invited membership persisted')
 
       const { data: profileLink, error: profileLinkError } = await admin
         .from('usuario_empresa_perfis').select('usuario_empresa_id,perfil_id')
         .eq('usuario_empresa_id', membership.id).eq('perfil_id', profileId).maybeSingle()
       if (profileLinkError || !profileLink) fail('Invited membership profile was not persisted', profileLinkError)
-      console.log('PASS: invited membership profile persisted')
 
       const { data: audit, error: auditError } = await admin
         .from('auditoria_eventos').select('id,acao,registro_id,empresa_id')
         .eq('registro_id', userId).eq('empresa_id', empresaId)
         .eq('acao', 'usuario.convidado_vinculado').maybeSingle()
       if (auditError || !audit) fail('Invitation audit was not persisted', auditError)
-      console.log(`PASS: invitation audit persisted (${audit.id})`)
 
       console.log('PASS: Edge invite -> Auth -> membership -> profile -> audit')
     } finally {
       const { error: cleanupError } = await admin.auth.admin.deleteUser(userId)
       if (cleanupError) console.warn(`WARN: integration cleanup failed for ${userId}: ${cleanupError.message}`)
-      else console.log('PASS: invitation smoke Auth cleanup (audit trail intentionally preserved)')
+      else console.log('PASS: invitation smoke cleanup')
     }
   }
 
