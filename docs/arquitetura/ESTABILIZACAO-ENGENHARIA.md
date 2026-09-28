@@ -2,11 +2,11 @@
 
 ## Objetivo
 
-Interromper o ciclo de correção reativa em produção/homologação funcional e criar uma esteira que encontre falhas previsíveis antes do checkpoint do usuário.
+Interromper o ciclo de correção reativa no ambiente oficial e criar uma esteira que encontre falhas previsíveis antes do checkpoint manual do usuário.
 
 ## Problema identificado
 
-O gate local atual cobre PGlite, build, lint e Playwright, mas não reproduz integralmente:
+O gate local cobre PGlite, build, lint e Playwright, mas não reproduz integralmente:
 
 - PostgREST hospedado;
 - formato real de JWT/settings do Supabase;
@@ -19,18 +19,36 @@ O gate local atual cobre PGlite, build, lint e Playwright, mas não reproduz int
 
 Por isso, uma validação local verde não é suficiente para liberar fluxos que dependem desses componentes.
 
+## Decisão atual de ambiente
+
+Por decisão do projeto, não será criada uma branch/projeto Supabase de homologação neste momento. O gate hospedado usará o projeto oficial com proteções adicionais.
+
+A consequência é que o gate oficial deve operar em dois níveis:
+
+```text
+Nível 1 — read-only por padrão
+Auth login -> memberships -> tenant -> plano -> entitlements
+
+Nível 2 — mutation controlada somente quando necessária
+Edge -> Auth invite -> RPC -> membership -> profile -> audit -> cleanup
+```
+
+Mutation no ambiente oficial nunca é implícita: exige flags explícitas, service_role local, e-mail dedicado e confirmação exata do project ref.
+
 ## Nova esteira obrigatória
 
 ```text
 implementação
   -> validate:local
-  -> deploy em Supabase de homologação
-  -> test:integration
-  -> Playwright/smoke contra homologação
+  -> test:integration read-only no Supabase oficial
+  -> quando houver fluxo de escrita: mutation smoke controlada + cleanup
   -> aprovação dos gates 07/08/09
-  -> deploy principal
+  -> deploy/ajuste oficial
   -> smoke pós-deploy
+  -> checkpoint visual do usuário somente no final
 ```
+
+Como o mesmo projeto é usado para integração e operação, qualquer mutation smoke deve ser pequena, identificável, auditável e removível.
 
 ## Comandos
 
@@ -75,15 +93,32 @@ npm.cmd run validate:release
 
 Executa primeiro o gate local e depois o hospedado.
 
-## Segurança do harness hospedado
+## Segurança do harness hospedado no projeto oficial
 
-O teste de integração:
+Para executar contra o projeto oficial o teste exige:
 
-- exige `BPF_INTEGRATION_ENVIRONMENT=homologation`;
-- recusa por padrão o project ref principal atual;
-- não executa mutation sem `BPF_INTEGRATION_ALLOW_MUTATIONS=YES`;
+```text
+BPF_INTEGRATION_ENVIRONMENT=official
+BPF_INTEGRATION_ALLOW_PRODUCTION=YES
+```
+
+Por padrão ele continua read-only.
+
+Mutation completa exige adicionalmente:
+
+```text
+BPF_INTEGRATION_ALLOW_MUTATIONS=YES
+BPF_INTEGRATION_PRODUCTION_MUTATION_CONFIRM=yequhfvcbwnxmqobgumu
+BPF_INTEGRATION_SERVICE_ROLE_KEY=<somente local>
+BPF_INTEGRATION_INVITE_EMAIL=<e-mail exclusivo de smoke>
+```
+
+O harness:
+
+- não executa mutation sem todas as confirmações;
 - exige `service_role` somente no arquivo local ignorado pelo Git;
-- exige e-mail de teste dedicado para convite;
+- impede usar o mesmo e-mail do administrador;
+- verifica Auth, membership, perfil e auditoria depois do convite;
 - remove o usuário criado ao fim do smoke quando possível.
 
 Nunca versionar `.env.integration.local`.
@@ -137,12 +172,12 @@ O gate só é verde se a cadeia chegar ao fim.
 
 ## Observabilidade
 
-Próxima etapa desta fase:
+A Edge Function deve retornar e registrar informação suficiente para diagnóstico sem expor detalhes sensíveis ao usuário:
 
-- padronizar códigos de erro por etapa da Edge Function;
-- incluir `requestId`/correlation id em resposta e logs;
-- diferenciar erro de Auth, tenant, perfil, plano, persistência e auditoria;
-- evitar mensagens genéricas que escondam o ponto de falha.
+- código de erro por etapa;
+- `requestId`/correlation id;
+- distinção entre Auth, tenant, permissão, perfil, plano, persistência e auditoria;
+- mensagem funcional limpa no frontend.
 
 ## Modelo de dados
 
@@ -159,9 +194,9 @@ A fase termina quando:
 
 1. migrations são auto-descobertas no harness;
 2. `validate:local` está verde;
-3. existe ambiente Supabase dedicado de homologação;
-4. `test:integration` está verde nesse ambiente;
-5. convite completo passa sem intervenção manual no banco;
-6. erros da Edge têm códigos/correlação suficientes para diagnóstico;
-7. Agentes 07, 08 e 09 exigem evidência hospedada para fluxos hosted-only;
+3. `test:integration` read-only está verde contra o oficial;
+4. o convite completo passa em mutation smoke controlada e faz cleanup;
+5. erros da Edge têm códigos/correlação suficientes para diagnóstico;
+6. Agentes 07, 08 e 09 exigem evidência hospedada para fluxos hosted-only;
+7. a dependência do dual-write legado está mapeada e com plano de retirada;
 8. somente então novas funcionalidades são retomadas.
