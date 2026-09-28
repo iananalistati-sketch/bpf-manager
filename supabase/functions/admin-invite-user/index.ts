@@ -75,7 +75,8 @@ Deno.serve(async (req: Request) => {
   }
 
   const targetId = invited.user.id
-  const { error: linkError } = await caller.rpc('admin_usuario_vincular_convite_tenant', {
+  const { error: linkError } = await admin.rpc('admin_usuario_vincular_convite_server', {
+    p_ator_id: context.usuario_id,
     p_empresa_id: empresaId,
     p_usuario_id: targetId,
     p_unidade_id: body.unidadeId || null,
@@ -91,7 +92,9 @@ Deno.serve(async (req: Request) => {
         ? 'O perfil selecionado não pode ser delegado neste tenant.'
         : lower.includes('unidade')
           ? 'A unidade selecionada não é válida para esta empresa.'
-          : 'O convite foi criado no Auth, mas o vínculo empresarial falhou. O usuário foi removido novamente.'
+          : lower.includes('membership') || lower.includes('permissao')
+            ? 'Sua permissão para convidar usuários nesta empresa não está mais disponível.'
+            : 'O convite foi criado no Auth, mas o vínculo empresarial falhou. O usuário foi removido novamente.'
     return json(400, { error: message, code: 'tenant_link_failed' })
   }
 
