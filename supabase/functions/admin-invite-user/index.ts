@@ -11,6 +11,26 @@ const json = (status: number, body: unknown) => new Response(JSON.stringify(body
   headers: { ...cors, 'Content-Type': 'application/json' },
 })
 
+function resolveInviteRedirect(req: Request) {
+  const configured = Deno.env.get('APP_URL')?.trim()
+  const origin = req.headers.get('Origin')?.trim()
+
+  if (configured) return `${configured.replace(/\/$/, '')}/redefinir-senha`
+  if (!origin) return undefined
+
+  try {
+    const url = new URL(origin)
+    const local = url.hostname === 'localhost' || url.hostname === '127.0.0.1'
+    if (local && (url.protocol === 'http:' || url.protocol === 'https:')) {
+      return `${url.origin}/redefinir-senha`
+    }
+  } catch {
+    return undefined
+  }
+
+  return undefined
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors })
   if (req.method !== 'POST') return json(405, { error: 'Método não permitido.', code: 'method_not_allowed' })
@@ -64,7 +84,12 @@ Deno.serve(async (req: Request) => {
     return json(403, { error: 'Você não possui permissão para convidar usuários nesta empresa.', code: 'permission_denied' })
   }
 
-  const { data: invited, error: inviteError } = await admin.auth.admin.inviteUserByEmail(email, { data: { nome } })
+  const redirectTo = resolveInviteRedirect(req)
+  const inviteOptions = redirectTo
+    ? { data: { nome }, redirectTo }
+    : { data: { nome } }
+
+  const { data: invited, error: inviteError } = await admin.auth.admin.inviteUserByEmail(email, inviteOptions)
   if (inviteError || !invited.user) {
     const lower = inviteError?.message?.toLowerCase() ?? ''
     const alreadyExists = lower.includes('already') || lower.includes('registered') || lower.includes('exists')
@@ -98,5 +123,5 @@ Deno.serve(async (req: Request) => {
     return json(400, { error: message, code: 'tenant_link_failed' })
   }
 
-  return json(200, { userId: targetId, email, empresaId })
+  return json(200, { userId: targetId, email, empresaId, redirectTo: redirectTo ?? null })
 })
