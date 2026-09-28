@@ -1,54 +1,46 @@
-import { readFile } from 'node:fs/promises'
+import { readdir, readFile } from 'node:fs/promises'
+import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { PGlite } from '@electric-sql/pglite'
 
-const read = (path) => readFile(new URL(`../${path}`, import.meta.url), 'utf8')
-const migrations = [
-  'supabase/migrations/20260916163832_administrative_user_read.sql',
-  'supabase/migrations/20260916223100_fix_authz_reader_identity.sql',
-  'supabase/migrations/20260916223400_optimize_administrative_read_rls.sql',
-  'supabase/migrations/20260918112000_admin_user_commands.sql',
-  'supabase/migrations/20260918120500_fix_admin_writer_select_grants.sql',
-  'supabase/migrations/20260918133000_serialize_last_admin_mutations.sql',
-  'supabase/migrations/20260918134450_allow_admin_writer_set_role.sql',
-  'supabase/migrations/20260918134500_complete_administration_foundation.sql',
-  'supabase/migrations/20260918134600_expand_admin_audit_writer_policy.sql',
-  'supabase/migrations/20260918134700_harden_profile_delegation.sql',
-  'supabase/migrations/20260918134800_fix_complete_admin_writer_grants.sql',
-  'supabase/migrations/20260923143000_membership_compatibility_foundation.sql',
-  'supabase/migrations/20260923150000_tenant_context_contract.sql',
-  'supabase/migrations/20260925100000_plan_entitlements_foundation.sql',
-  'supabase/migrations/20260925120000_admin_invite_membership_bridge.sql',
-  'supabase/migrations/20260925121000_fix_plan_summary_consumption.sql',
-  'supabase/migrations/20260925121500_harden_tenant_invite_actor_read.sql',
-  'supabase/migrations/20260925122000_fix_tenant_invite_target_visibility.sql',
-  'supabase/migrations/20260925122500_harden_tenant_invite_membership_upsert.sql',
-  'supabase/migrations/20260925123000_fix_tenant_invite_legacy_profile_insert.sql',
-  'supabase/migrations/20260925123500_make_invite_legacy_profile_policy_nonrecursive.sql',
-  'supabase/migrations/20260925124000_simplify_invite_legacy_profile_rls.sql',
-  'supabase/migrations/20260925124500_stop_duplicating_invite_auth_in_usuario_perfis_rls.sql',
-  'supabase/migrations/20260925125000_bridge_legacy_profile_sync_outside_rls.sql',
-]
-const membershipMigration = migrations.at(-13)
-const testSuites = [
-  'supabase/tests/administrative_user_read.sql',
-  'supabase/tests/admin_user_commands.sql',
-  'supabase/tests/complete_administration_foundation.sql',
-  'supabase/tests/profile_delegation_security.sql',
-  'supabase/tests/structure_admin_paths.sql',
-  'supabase/tests/membership_compatibility.sql',
-  'supabase/tests/tenant_context_contract.sql',
-  'supabase/tests/plan_entitlements_foundation.sql',
-  'supabase/tests/admin_invite_membership_bridge.sql',
-]
+const root = fileURLToPath(new URL('..', import.meta.url))
+const migrationsDir = join(root, 'supabase', 'migrations')
+const testsDir = join(root, 'supabase', 'tests')
+const read = (path) => readFile(join(root, path), 'utf8')
+
+const migrations = (await readdir(migrationsDir, { withFileTypes: true }))
+  .filter(entry => entry.isFile() && /^\d{14}_.+\.sql$/.test(entry.name))
+  .map(entry => `supabase/migrations/${entry.name}`)
+  .sort()
+
+const testSuites = (await readdir(testsDir, { withFileTypes: true }))
+  .filter(entry => entry.isFile() && entry.name.endsWith('.sql'))
+  .map(entry => `supabase/tests/${entry.name}`)
+  .sort()
+
+if (migrations.length === 0) throw new Error('No versioned migrations found')
+if (testSuites.length === 0) throw new Error('No SQL test suites found')
+
+const membershipMigration = 'supabase/migrations/20260923143000_membership_compatibility_foundation.sql'
+if (!migrations.includes(membershipMigration)) throw new Error('Membership compatibility migration is missing')
 
 const db = await PGlite.create()
 try {
   const { rows: version } = await db.query('SHOW server_version')
   console.log(`Local PostgreSQL: ${version[0].server_version} (PGlite; reconstructed fixture)`)
+  console.log(`Discovered ${migrations.length} migrations and ${testSuites.length} SQL suites automatically`)
   await db.exec(await read('supabase/tests/fixtures/current_schema.sql'))
 
   const baseMigration = await read(migrations[0])
-  await db.exec(`BEGIN;\n    INSERT INTO empresas(id, razao_social) VALUES\n      ('00000000-0000-0000-0000-000000000001', 'A'),\n      ('00000000-0000-0000-0000-000000000002', 'B');\n    INSERT INTO unidades(id, empresa_id, nome) VALUES\n      ('00000000-0000-0000-0000-000000000003', '00000000-0000-0000-0000-000000000002', 'B');\n    INSERT INTO auth.users(id) VALUES ('00000000-0000-0000-0000-000000000004');\n    UPDATE usuarios SET empresa_id = '00000000-0000-0000-0000-000000000001',\n      unidade_id = '00000000-0000-0000-0000-000000000003';`)
+  await db.exec(`BEGIN;
+    INSERT INTO empresas(id, razao_social) VALUES
+      ('00000000-0000-0000-0000-000000000001', 'A'),
+      ('00000000-0000-0000-0000-000000000002', 'B');
+    INSERT INTO unidades(id, empresa_id, nome) VALUES
+      ('00000000-0000-0000-0000-000000000003', '00000000-0000-0000-0000-000000000002', 'B');
+    INSERT INTO auth.users(id) VALUES ('00000000-0000-0000-0000-000000000004');
+    UPDATE usuarios SET empresa_id = '00000000-0000-0000-0000-000000000001',
+      unidade_id = '00000000-0000-0000-0000-000000000003';`)
   let rejected = false
   try { await db.exec(baseMigration) } catch (error) {
     if (!error.message.includes('Existing usuarios contain incompatible empresa/unidade')) throw error
@@ -113,6 +105,7 @@ try {
   }
 
   for (const path of testSuites) {
+    console.log(`RUN: ${path.split('/').at(-1)}`)
     const results = await db.exec(await read(path))
     for (const result of results) for (const row of result.rows) {
       if (row.result) console.log(row.result)
