@@ -17,6 +17,15 @@ GRANT service_role TO postgres WITH INHERIT FALSE, SET TRUE;
 SET SESSION AUTHORIZATION postgres;
 CREATE SCHEMA auth;
 CREATE SCHEMA private;
+
+-- O Supabase hospedado concede ao service_role acesso amplo aos objetos públicos
+-- e aplica privilégios equivalentes aos novos objetos criados pelo deployer. O fixture
+-- reproduz esse baseline para que SECURITY INVOKER + service_role se comporte localmente
+-- como no ambiente hospedado, sem depender de grants artificiais por migration.
+GRANT USAGE ON SCHEMA public, auth, private TO service_role;
+ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
+  GRANT ALL PRIVILEGES ON TABLES TO service_role;
+
 CREATE TABLE auth.users (id uuid PRIMARY KEY, email text, raw_user_meta_data jsonb);
 CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS $$
   SELECT nullif(current_setting('request.jwt.claim.sub', true), '')::uuid
@@ -98,6 +107,11 @@ CREATE TABLE public.perfil_permissoes (
   created_by uuid,
   PRIMARY KEY (perfil_id, permissao_id)
 );
+
+-- Os objetos que já existem antes das migrations também recebem os privilégios
+-- equivalentes aos observados no Supabase oficial.
+GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO service_role;
+
 CREATE FUNCTION private.handle_new_auth_user() RETURNS trigger LANGUAGE plpgsql
 SECURITY DEFINER SET search_path = '' AS $$
 BEGIN
