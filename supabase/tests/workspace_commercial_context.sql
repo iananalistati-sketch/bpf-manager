@@ -55,9 +55,11 @@ $block$;
 
 reset role;
 
--- Expiracao nao apaga workspace: o contrato muda para somente leitura.
+-- Expiracao nao apaga workspace: simula um trial de 14 dias já encerrado,
+-- preservando a invariavel trial_fim > trial_inicio do dominio.
 update public.empresa_assinaturas
-set trial_fim=now()-interval '1 minute'
+set trial_inicio=now()-interval '15 days',
+    trial_fim=now()-interval '1 day'
 where empresa_id=(select empresa_id from qa_commercial_empresa);
 
 set local role authenticated;
