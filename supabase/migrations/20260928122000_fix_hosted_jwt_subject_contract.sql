@@ -4,7 +4,6 @@
 set lock_timeout = '5s';
 set statement_timeout = '60s';
 
--- Helper imutável de contrato: não acessa tabelas nem auth schema.
 create or replace function private.request_jwt_subject()
 returns uuid
 language sql
@@ -21,7 +20,6 @@ $function$;
 revoke all on function private.request_jwt_subject() from public, anon, service_role;
 grant execute on function private.request_jwt_subject() to authenticated, bpf_tenant_reader, bpf_entitlement_reader, bpf_admin_writer;
 
--- Tenant reader policies.
 alter policy usuarios_tenant_reader_proprio on public.usuarios
   using (id = private.request_jwt_subject());
 alter policy usuario_empresas_tenant_reader_proprio on public.usuario_empresas
@@ -59,7 +57,6 @@ alter policy perfis_tenant_reader_escopo on public.perfis
     )
   );
 
--- Entitlement reader policies.
 alter policy usuarios_entitlement_reader_proprio on public.usuarios
   using (id = private.request_jwt_subject());
 alter policy usuario_empresas_entitlement_reader_proprio on public.usuario_empresas
@@ -76,11 +73,19 @@ alter policy empresa_planos_entitlement_reader_vinculos on public.empresa_planos
       and u.status = 'ativo'
   ));
 
--- Writer actor read usada por fluxos tenant-aware legados.
-alter policy usuarios_admin_writer_actor_select on public.usuarios
-  using (id = private.request_jwt_subject() and ativo and status = 'ativo');
+-- Essa policy existe apenas em ambientes que aplicaram o hardening intermediário do writer.
+do $block$
+begin
+  if exists (
+    select 1 from pg_policies
+    where schemaname='public' and tablename='usuarios'
+      and policyname='usuarios_admin_writer_actor_select'
+  ) then
+    execute 'alter policy usuarios_admin_writer_actor_select on public.usuarios using (id = private.request_jwt_subject() and ativo and status = ''ativo'')';
+  end if;
+end
+$block$;
 
--- Recria os contratos tenant-aware com subject compatível com hosted PostgREST.
 grant bpf_tenant_reader to postgres with inherit false, set true;
 grant create on schema private to bpf_tenant_reader;
 set role bpf_tenant_reader;
@@ -158,7 +163,6 @@ reset role;
 revoke create on schema private from bpf_tenant_reader;
 grant bpf_tenant_reader to postgres with inherit false, set false;
 
--- Recria os contratos de plano com o mesmo subject resolver.
 grant bpf_entitlement_reader to postgres with inherit false, set true;
 grant create on schema private to bpf_entitlement_reader;
 set role bpf_entitlement_reader;
