@@ -7,11 +7,29 @@
 .settings-content { padding: 26px; }
 .settings-section-heading { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 24px; }
 .settings-section-heading p { color: var(--muted); font-size: 12px; margin-top: 5px; }
+.settings-section-heading.compact { margin-bottom: 16px; }
+.settings-section-heading.compact h3 { display: flex; align-items: center; gap: 8px; font-size: 14px; }
 .settings-heading-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
 .settings-notice { display: flex; align-items: flex-start; gap: 10px; background: #f1f7f3; border: 1px solid #dce9e1; border-radius: 8px; padding: 14px 16px; font-size: 12px; color: #4c6c58; margin: 18px 0; }
 .settings-notice strong { display: block; margin-bottom: 4px; }
 .settings-notice.warning { background: #fff7e8; border-color: #ead8b7; color: #88611f; }
 .settings-muted { color: #647169; font-size: 12px; }
+.settings-plan-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin: 20px 0 24px; }
+.settings-plan-card { min-width: 0; display: flex; align-items: flex-start; gap: 14px; padding: 20px; border: 1px solid var(--border); border-radius: 10px; background: #fff; box-shadow: 0 1px 2px #163a2a0a; }
+.settings-plan-card .metric-icon { width: 42px; height: 42px; display: inline-flex; align-items: center; justify-content: center; flex: 0 0 42px; border-radius: 10px; }
+.settings-plan-card .metric-icon.green { color: #137a56; background: #e8f5ef; }
+.settings-plan-card .metric-icon.blue { color: #2b69a5; background: #edf5ff; }
+.settings-plan-card .metric-icon.purple { color: #7354a7; background: #f2edfb; }
+.settings-plan-card > div { min-width: 0; }
+.settings-plan-card small { display: block; margin-bottom: 5px; color: #718078; font-size: 11px; }
+.settings-plan-card strong { display: block; color: #17382d; font-size: 17px; line-height: 1.25; overflow-wrap: anywhere; }
+.settings-plan-card p { margin: 7px 0 0; color: #647169; font-size: 11px; line-height: 1.45; }
+.settings-plan-entitlements { border: 1px solid var(--border); border-radius: 10px; padding: 20px; background: #fafcfb; }
+.settings-plan-list { display: grid; gap: 8px; }
+.settings-plan-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 13px 14px; border: 1px solid #e5ece8; border-radius: 8px; background: #fff; }
+.settings-plan-row > div { min-width: 0; }
+.settings-plan-row strong { display: block; font-size: 12px; color: #273a32; }
+.settings-plan-row small { display: block; margin-top: 3px; color: #7a8780; font-size: 10px; overflow-wrap: anywhere; }
 .settings-overview, .settings-user-meta { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 22px; margin: 0; }
 .settings-overview { background: #fafcfb; border: 1px solid var(--border); border-radius: 8px; padding: 22px; }
 .settings-overview dt, .settings-user-meta dt { font-size: 11px; color: #647169; margin-bottom: 6px; }
@@ -110,6 +128,7 @@ body:has(.settings-dialog[open]) { overflow: hidden; }
 .settings-audit-json pre { max-height: 240px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; border: 1px solid var(--border); border-radius: 7px; background: white; padding: 10px; font-size: 10px; }
 @media (max-width: 1150px) {
   .settings-filters, .settings-overview, .settings-user-meta, .settings-profiles-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .settings-plan-summary { grid-template-columns: 1fr; }
 }
 @media (max-width: 700px) {
   .settings-structure-grid, .settings-audit-json, .settings-audit-body dl { grid-template-columns: 1fr; }
@@ -123,7 +142,7 @@ body:has(.settings-dialog[open]) { overflow: hidden; }
   .settings-overview-cards, .settings-profiles-grid, .settings-permission-groups, .settings-fields, .settings-filters, .settings-audit-filters { grid-template-columns: 1fr; }
   .settings-overview { padding: 16px; gap: 16px; }
   .settings-user-card { padding: 16px; }
-  .settings-user-footer, .settings-profile-action, .settings-audit-event summary { flex-wrap: wrap; }
+  .settings-user-footer, .settings-profile-action, .settings-audit-event summary, .settings-plan-row { flex-wrap: wrap; }
   .settings-user-heading { gap: 8px; }
   .settings-feedback { padding: 24px 8px; }
   .settings-profile-action .button, .settings-heading-actions .button { width: 100%; }
