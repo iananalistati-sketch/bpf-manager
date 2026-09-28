@@ -10,9 +10,7 @@ async function loadLocalEnv() {
       const match = line.match(/^([A-Z0-9_]+)=(.*)$/)
       if (!match || process.env[match[1]]) continue
       let value = match[2].trim()
-      if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
-        value = value.slice(1, -1)
-      }
+      if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) value = value.slice(1, -1)
       process.env[match[1]] = value
     }
   } catch (error) {
@@ -38,20 +36,27 @@ const allowMutations = env('BPF_INTEGRATION_ALLOW_MUTATIONS', false) === 'YES'
 const serviceRoleKey = env('BPF_INTEGRATION_SERVICE_ROLE_KEY', false)
 const inviteEmail = env('BPF_INTEGRATION_INVITE_EMAIL', false)
 const explicitProfileId = env('BPF_INTEGRATION_PROFILE_ID', false)
+const productionMutationConfirmation = env('BPF_INTEGRATION_PRODUCTION_MUTATION_CONFIRM', false)
 
-if (environment !== 'homologation') {
-  throw new Error('BPF_INTEGRATION_ENVIRONMENT must be homologation. Integration tests never default to production.')
+if (!['homologation', 'official'].includes(environment)) {
+  throw new Error('BPF_INTEGRATION_ENVIRONMENT must be homologation or official.')
 }
 
 const projectRef = new URL(url).hostname.split('.')[0]
-const productionRef = 'yequhfvcbwnxmqobgumu'
-if (projectRef === productionRef && !allowProduction) {
-  throw new Error('Refusing to run integration tests against the production project. Use a homologation project/branch.')
+const officialRef = 'yequhfvcbwnxmqobgumu'
+const isOfficial = projectRef === officialRef
+
+if (isOfficial && (!allowProduction || environment !== 'official')) {
+  throw new Error('Official project requires BPF_INTEGRATION_ENVIRONMENT=official and BPF_INTEGRATION_ALLOW_PRODUCTION=YES.')
+}
+if (!isOfficial && environment === 'official') {
+  throw new Error('BPF_INTEGRATION_ENVIRONMENT=official is allowed only for the configured official project ref.')
+}
+if (isOfficial && allowMutations && productionMutationConfirmation !== officialRef) {
+  throw new Error(`Mutation smoke on the official project requires BPF_INTEGRATION_PRODUCTION_MUTATION_CONFIRM=${officialRef}.`)
 }
 
-const client = createClient(url, publishableKey, {
-  auth: { persistSession: false, autoRefreshToken: false },
-})
+const client = createClient(url, publishableKey, { auth: { persistSession: false, autoRefreshToken: false } })
 
 const fail = (message, error) => {
   const detail = error?.message ? `: ${error.message}` : ''
@@ -59,11 +64,11 @@ const fail = (message, error) => {
 }
 
 console.log(`Hosted Supabase integration: ${projectRef} (${environment})`)
+console.log(isOfficial
+  ? `MODE: official ${allowMutations ? 'controlled-mutation smoke' : 'read-only smoke'}`
+  : `MODE: homologation ${allowMutations ? 'mutation smoke' : 'read-only smoke'}`)
 
-const { data: login, error: loginError } = await client.auth.signInWithPassword({
-  email: adminEmail,
-  password: adminPassword,
-})
+const { data: login, error: loginError } = await client.auth.signInWithPassword({ email: adminEmail, password: adminPassword })
 if (loginError || !login.session) fail('Admin login failed', loginError)
 console.log('PASS: hosted Auth login')
 
@@ -76,36 +81,29 @@ try {
   const tenant = vinculos[0]
   const empresaId = tenant.empresa_id
 
-  const { data: contexto, error: contextoError } = await client
-    .rpc('meu_contexto_empresa', { p_empresa_id: empresaId })
-    .maybeSingle()
+  const { data: contexto, error: contextoError } = await client.rpc('meu_contexto_empresa', { p_empresa_id: empresaId }).maybeSingle()
   if (contextoError || !contexto) fail('meu_contexto_empresa failed', contextoError)
   if (contexto.empresa_id !== empresaId || contexto.status !== 'ativo') fail('Hosted tenant context is inconsistent')
   console.log('PASS: hosted JWT subject + tenant context')
 
-  const { data: resumo, error: resumoError } = await client
-    .rpc('meu_plano_resumo', { p_empresa_id: empresaId })
-    .maybeSingle()
+  const { data: resumo, error: resumoError } = await client.rpc('meu_plano_resumo', { p_empresa_id: empresaId }).maybeSingle()
   if (resumoError || !resumo) fail('meu_plano_resumo failed', resumoError)
   if (typeof resumo.usuarios_ativos !== 'number' && typeof resumo.usuarios_ativos !== 'string') fail('Plan summary did not return usage')
   console.log('PASS: hosted plan summary')
 
-  const { data: entitlements, error: entitlementsError } = await client
-    .rpc('meu_plano_entitlements', { p_empresa_id: empresaId })
+  const { data: entitlements, error: entitlementsError } = await client.rpc('meu_plano_entitlements', { p_empresa_id: empresaId })
   if (entitlementsError) fail('meu_plano_entitlements failed', entitlementsError)
   if (!Array.isArray(entitlements)) fail('Plan entitlements did not return an array')
   console.log('PASS: hosted plan entitlements')
 
   if (!allowMutations) {
-    console.log('SKIP: mutation smoke disabled (set BPF_INTEGRATION_ALLOW_MUTATIONS=YES in homologation)')
+    console.log(`SKIP: mutation smoke disabled (${isOfficial ? 'recommended default on official project' : 'set BPF_INTEGRATION_ALLOW_MUTATIONS=YES when needed'})`)
   } else {
     if (!serviceRoleKey) fail('Mutation smoke requires BPF_INTEGRATION_SERVICE_ROLE_KEY')
     if (!inviteEmail) fail('Mutation smoke requires BPF_INTEGRATION_INVITE_EMAIL')
     if (inviteEmail.toLowerCase() === adminEmail.toLowerCase()) fail('Invite smoke email must differ from admin email')
 
-    const admin = createClient(url, serviceRoleKey, {
-      auth: { persistSession: false, autoRefreshToken: false },
-    })
+    const admin = createClient(url, serviceRoleKey, { auth: { persistSession: false, autoRefreshToken: false } })
 
     let profileId = explicitProfileId
     if (!profileId) {
@@ -125,10 +123,10 @@ try {
       body: {
         empresaId,
         email: inviteEmail,
-        nome: 'Smoke Test Homologacao',
+        nome: isOfficial ? 'Smoke Test Oficial' : 'Smoke Test Homologacao',
         unidadeId: contexto.unidade_id ?? null,
         perfilIds: [profileId],
-        justificativa: `Smoke integration ${new Date().toISOString()}`,
+        justificativa: `Smoke integration ${environment} ${new Date().toISOString()}`,
       },
     })
     if (invokeError) fail('admin-invite-user Edge Function failed', invokeError)
@@ -140,28 +138,19 @@ try {
       if (authUserError || !authUser.user) fail('Invited Auth user was not persisted', authUserError)
 
       const { data: membership, error: membershipError } = await admin
-        .from('usuario_empresas')
-        .select('id,usuario_id,empresa_id,status')
-        .eq('usuario_id', userId)
-        .eq('empresa_id', empresaId)
-        .maybeSingle()
+        .from('usuario_empresas').select('id,usuario_id,empresa_id,status')
+        .eq('usuario_id', userId).eq('empresa_id', empresaId).maybeSingle()
       if (membershipError || !membership || membership.status !== 'ativo') fail('Invited membership was not persisted', membershipError)
 
       const { data: profileLink, error: profileLinkError } = await admin
-        .from('usuario_empresa_perfis')
-        .select('usuario_empresa_id,perfil_id')
-        .eq('usuario_empresa_id', membership.id)
-        .eq('perfil_id', profileId)
-        .maybeSingle()
+        .from('usuario_empresa_perfis').select('usuario_empresa_id,perfil_id')
+        .eq('usuario_empresa_id', membership.id).eq('perfil_id', profileId).maybeSingle()
       if (profileLinkError || !profileLink) fail('Invited membership profile was not persisted', profileLinkError)
 
       const { data: audit, error: auditError } = await admin
-        .from('auditoria_eventos')
-        .select('id,acao,registro_id,empresa_id')
-        .eq('registro_id', userId)
-        .eq('empresa_id', empresaId)
-        .eq('acao', 'usuario.convidado_vinculado')
-        .maybeSingle()
+        .from('auditoria_eventos').select('id,acao,registro_id,empresa_id')
+        .eq('registro_id', userId).eq('empresa_id', empresaId)
+        .eq('acao', 'usuario.convidado_vinculado').maybeSingle()
       if (auditError || !audit) fail('Invitation audit was not persisted', auditError)
 
       console.log('PASS: Edge invite -> Auth -> membership -> profile -> audit')
