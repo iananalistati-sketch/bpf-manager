@@ -11,6 +11,9 @@ CREATE ROLE anon NOLOGIN;
 CREATE ROLE authenticated NOLOGIN;
 CREATE ROLE service_role NOLOGIN BYPASSRLS;
 GRANT authenticated TO postgres WITH INHERIT FALSE, SET TRUE;
+-- TEST HARNESS ONLY: permite ao deployer simular a role efetiva usada pela Edge Function.
+-- Não representa um grant de produção nem torna service_role acessível a authenticated.
+GRANT service_role TO postgres WITH INHERIT FALSE, SET TRUE;
 SET SESSION AUTHORIZATION postgres;
 CREATE SCHEMA auth;
 CREATE SCHEMA private;
