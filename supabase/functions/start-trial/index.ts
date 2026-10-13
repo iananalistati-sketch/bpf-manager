@@ -41,7 +41,8 @@ Deno.serve(async (req: Request) => {
     auth: { persistSession: false, autoRefreshToken: false },
   })
 
-  const { data: userData, error: userError } = await caller.auth.getUser()
+  const accessToken = authorization.replace(/^Bearer\s+/i, '').trim()
+  const { data: userData, error: userError } = await caller.auth.getUser(accessToken)
   const user = userData.user
   if (userError || !user) {
     logFailure(requestId, 'identity', userError ?? 'Authenticated user unavailable')
