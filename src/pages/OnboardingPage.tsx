@@ -25,7 +25,7 @@ export function OnboardingPage() {
   if (loading) return <main className="auth-state-page"><section className="auth-state-card panel"><p>Carregando configuração inicial...</p></section></main>
   if (!empresaAtivaId || !contexto?.empresa_id) return <Navigate to="/iniciar-trial" replace />
   if (!workspaceCommercial) return <Navigate to="/dashboard" replace />
-  if (workspaceCommercial.onboarding_status === 'concluido') return <Navigate to="/dashboard" replace />
+  if (workspaceCommercial.modo_acesso !== 'normal' || workspaceCommercial.onboarding_status === 'concluido') return <Navigate to="/dashboard" replace />
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
