@@ -67,6 +67,16 @@ const fail = (message, error) => {
   throw new Error(`${message}${detail}`)
 }
 
+const readFunctionErrorBody = async (error) => {
+  const context = error?.context
+  if (!context) return null
+  if (context.body && typeof context.body === 'object') return context.body
+  if (typeof context.clone === 'function' && typeof context.json === 'function') {
+    try { return await context.clone().json() } catch { return null }
+  }
+  return null
+}
+
 console.log(`Hosted Supabase integration: ${projectRef} (${environment})`)
 console.log(isOfficial
   ? `MODE: official ${allowMutations ? 'controlled-mutation smoke' : 'read-only smoke'}`
@@ -99,6 +109,24 @@ try {
   if (entitlementsError) fail('meu_plano_entitlements failed', entitlementsError)
   if (!Array.isArray(entitlements)) fail('Plan entitlements did not return an array')
   console.log('PASS: hosted plan entitlements')
+
+  // Side-effect-free Edge probe: the hosted admin already has a membership, so
+  // start-trial must authenticate the caller and reject before provisioning anything.
+  const { error: trialProbeError } = await client.functions.invoke('start-trial', {
+    body: {
+      razaoSocial: 'Smoke Existing Workspace',
+      nomeFantasia: 'Smoke Existing',
+      unidadeNome: 'Unidade Smoke',
+    },
+  })
+  if (!trialProbeError) fail('start-trial unexpectedly accepted a user that already has a hosted membership')
+  const trialProbeBody = await readFunctionErrorBody(trialProbeError)
+  if (trialProbeBody?.code !== 'TRIAL_PROVISIONING_FAILED') {
+    fail('start-trial hosted guard did not return the expected controlled rejection', {
+      message: trialProbeBody?.error ?? trialProbeError.message,
+    })
+  }
+  console.log('PASS: start-trial authenticates caller and rejects an already-linked hosted user')
 
   if (!allowMutations) {
     console.log(`SKIP: mutation smoke disabled (${isOfficial ? 'recommended default on official project' : 'set BPF_INTEGRATION_ALLOW_MUTATIONS=YES when needed'})`)
@@ -151,7 +179,7 @@ try {
       },
     })
     if (invokeError) {
-      const body = invokeError.context?.body
+      const body = await readFunctionErrorBody(invokeError)
       const code = body?.code ? ` [${body.code}]` : ''
       const requestId = body?.requestId ? ` requestId=${body.requestId}` : ''
       const detail = body?.error ?? invokeError.message
