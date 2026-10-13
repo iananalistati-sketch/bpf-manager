@@ -13,7 +13,7 @@ type TrialResponse = {
 }
 
 export function TrialSetupPage() {
-  const { session, contexto, vinculos, loading, refreshContexto, signOut } = useAuth()
+  const { session, contexto, vinculos, workspaceCommercial, loading, refreshContexto, signOut } = useAuth()
   const navigate = useNavigate()
   const [razaoSocial, setRazaoSocial] = useState('')
   const [nomeFantasia, setNomeFantasia] = useState('')
@@ -25,7 +25,12 @@ export function TrialSetupPage() {
 
   if (loading) return <main className="auth-state-page"><section className="auth-state-card panel"><p>Preparando seu acesso...</p></section></main>
   if (!session) return <Navigate to="/login" replace />
-  if (contexto?.empresa_id || vinculos.length > 0) return <Navigate to="/dashboard" replace />
+  if (contexto?.empresa_id || vinculos.length > 0) {
+    const target = workspaceCommercial && workspaceCommercial.onboarding_status !== 'concluido'
+      ? '/onboarding'
+      : '/dashboard'
+    return <Navigate to={target} replace />
+  }
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
