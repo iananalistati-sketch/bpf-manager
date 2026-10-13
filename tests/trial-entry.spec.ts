@@ -166,6 +166,73 @@ test('self-service percorre provisionamento, onboarding e libera o dashboard', a
   expect(JSON.stringify(onboardingPayload)).toContain('Recebimento')
 })
 
+test('trial expirado preserva acesso ao dashboard em modo somente leitura sem prender no onboarding', async ({ page }) => {
+  await page.addInitScript(({ userId }) => {
+    const user = {
+      id: userId,
+      aud: 'authenticated',
+      role: 'authenticated',
+      email: 'owner@example.test',
+      app_metadata: {},
+      user_metadata: { nome: 'Owner Trial' },
+      created_at: '2026-10-01T14:00:00Z',
+    }
+    localStorage.setItem('sb-bpf-test-auth-token', JSON.stringify({
+      access_token: 'expired-trial-token',
+      refresh_token: 'expired-trial-refresh',
+      expires_at: Math.floor(Date.now() / 1000) + 3600,
+      expires_in: 3600,
+      token_type: 'bearer',
+      user,
+    }))
+  }, { userId })
+
+  await page.route('https://bpf-test.supabase.co/**', async route => {
+    const url = new URL(route.request().url())
+
+    if (url.pathname.endsWith('/rest/v1/v_meu_contexto')) {
+      return route.fulfill({ status: 200, json: [activeContext] })
+    }
+    if (url.pathname.endsWith('/rest/v1/rpc/meus_vinculos')) {
+      return route.fulfill({ status: 200, json: [{
+        membership_id: membershipId,
+        empresa_id: companyId,
+        nome_fantasia: 'Fábrica Trial',
+        razao_social: 'Fábrica Trial Ltda',
+        unidade_id: unitId,
+        unidade_nome: 'Unidade Principal',
+        status: 'ativo',
+        is_owner: true,
+      }] })
+    }
+    if (url.pathname.endsWith('/rest/v1/rpc/meu_contexto_empresa')) {
+      return route.fulfill({ status: 200, json: [{ ...activeContext, membership_id: membershipId, is_owner: true }] })
+    }
+    if (url.pathname.endsWith('/rest/v1/rpc/meu_workspace_comercial')) {
+      return route.fulfill({ status: 200, json: [{
+        empresa_id: companyId,
+        plano_codigo: 'basic',
+        plano_nome: 'Basic',
+        assinatura_status: 'trialing',
+        trial_inicio: '2026-09-15T14:00:00Z',
+        trial_fim: '2026-09-29T14:00:00Z',
+        trial_expirado: true,
+        dias_trial_restantes: 0,
+        modo_acesso: 'somente_leitura',
+        onboarding_status: 'nao_iniciado',
+        onboarding_etapa: 'empresa',
+      }] })
+    }
+
+    return route.fulfill({ status: 200, json: [] })
+  })
+
+  await page.goto('/dashboard')
+  await expect(page).toHaveURL(/\/dashboard$/)
+  await expect(page.getByLabel('Status do trial')).toContainText('Trial encerrado')
+  await expect(page.getByLabel('Status do trial')).toContainText('somente leitura')
+})
+
 test('cadastro público envia nome do owner e comunica confirmação antes do trial', async ({ page }) => {
   let signupPayload: Record<string, unknown> | null = null
 
