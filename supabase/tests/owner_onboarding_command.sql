@@ -30,6 +30,12 @@ insert into public.usuario_empresas(usuario_id,empresa_id,status,is_owner)
 select 'af000000-0000-0000-0000-000000000002',empresa_id,'ativo',false
 from qa_onboarding_empresa;
 
+update public.usuarios
+set empresa_id=(select empresa_id from qa_onboarding_empresa),
+    status='ativo',
+    ativo=true
+where id='af000000-0000-0000-0000-000000000002';
+
 -- Owner pode avançar e concluir. O segundo update deve preservar os dados do primeiro.
 select set_config('request.jwt.claim.sub','af000000-0000-0000-0000-000000000001',true);
 select set_config('request.jwt.claims','{"sub":"af000000-0000-0000-0000-000000000001","role":"authenticated"}',true);
@@ -77,6 +83,26 @@ begin
   if v_count <> 2 then raise exception 'onboarding audit trail incomplete'; end if;
 end
 $block$;
+
+-- Payload fora do contrato é rejeitado no backend antes de qualquer escrita.
+select set_config('request.jwt.claim.sub','af000000-0000-0000-0000-000000000001',true);
+select set_config('request.jwt.claims','{"sub":"af000000-0000-0000-0000-000000000001","role":"authenticated"}',true);
+set local role authenticated;
+do $block$
+begin
+  begin
+    perform public.atualizar_meu_onboarding(
+      (select empresa_id from qa_onboarding_empresa),
+      'estrutura',
+      '{"campo_injetado":"nao permitido"}'::jsonb,
+      false
+    );
+    raise exception 'expected unsupported onboarding field rejection';
+  exception when invalid_parameter_value then null;
+  end;
+end
+$block$;
+reset role;
 
 -- Membro não-owner não pode alterar o onboarding.
 select set_config('request.jwt.claim.sub','af000000-0000-0000-0000-000000000002',true);
