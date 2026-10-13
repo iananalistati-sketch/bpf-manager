@@ -26,7 +26,7 @@ export function TrialSetupPage() {
   if (loading) return <main className="auth-state-page"><section className="auth-state-card panel"><p>Preparando seu acesso...</p></section></main>
   if (!session) return <Navigate to="/login" replace />
   if (contexto?.empresa_id || vinculos.length > 0) {
-    const target = workspaceCommercial && workspaceCommercial.onboarding_status !== 'concluido'
+    const target = workspaceCommercial && workspaceCommercial.modo_acesso === 'normal' && workspaceCommercial.onboarding_status !== 'concluido'
       ? '/onboarding'
       : '/dashboard'
     return <Navigate to={target} replace />
