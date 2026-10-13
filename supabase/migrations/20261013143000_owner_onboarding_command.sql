@@ -133,8 +133,10 @@ begin
        or not (coalesce(v_dados_merged->>'tipo_operacao','') = any(array['fabricacao','armazenamento','distribuicao','mista','outra'])) then
       raise exception using errcode='22023', message='Preencha responsavel tecnico, tipo de operacao e setores antes de concluir o onboarding';
     end if;
-    if jsonb_typeof(v_dados_merged->'setores') is distinct from 'array'
-       or jsonb_array_length(v_dados_merged->'setores') < 1 then
+    if jsonb_typeof(v_dados_merged->'setores') is distinct from 'array' then
+      raise exception using errcode='22023', message='Preencha responsavel tecnico, tipo de operacao e setores antes de concluir o onboarding';
+    end if;
+    if jsonb_array_length(v_dados_merged->'setores') < 1 then
       raise exception using errcode='22023', message='Preencha responsavel tecnico, tipo de operacao e setores antes de concluir o onboarding';
     end if;
   end if;
