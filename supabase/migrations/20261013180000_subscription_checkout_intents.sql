@@ -14,6 +14,7 @@ create table public.assinatura_contratacoes (
   provedor text null,
   provedor_checkout_id text null,
   checkout_url text null,
+  checkout_metadata jsonb not null default '{}'::jsonb,
   expires_at timestamptz not null,
   metadata jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now(),
@@ -33,7 +34,9 @@ create table public.assinatura_contratacoes (
   constraint assinatura_contratacoes_checkout_check check (
     (status='preparada' and provedor is null and provedor_checkout_id is null and checkout_url is null)
     or
-    (status<>'preparada')
+    (status='checkout_criado' and provedor is not null and provedor_checkout_id is not null and checkout_url is not null)
+    or
+    (status in ('confirmada','cancelada','falhou','expirada'))
   )
 );
 
@@ -103,6 +106,12 @@ begin
          where p.id=v_existente.plano_id and p.codigo=v_codigo
        ) then
       raise exception using errcode='23505', message='Chave de idempotencia ja utilizada com outra contratacao';
+    end if;
+
+    if v_existente.status='preparada' and v_existente.expires_at <= now() then
+      update public.assinatura_contratacoes
+      set status='expirada',updated_at=now()
+      where id=v_existente.id;
     end if;
 
     return query
@@ -260,13 +269,19 @@ begin
     update public.assinatura_contratacoes
     set status='expirada',updated_at=now()
     where id=v_row.id;
-    raise exception using errcode='23514', message='Contratacao expirada antes da criacao do checkout';
+
+    return query
+    select ac.id,ac.empresa_id,ac.assinatura_id,ac.plano_id,ac.status,ac.checkout_url
+    from public.assinatura_contratacoes ac
+    where ac.id=v_row.id;
+    return;
   end if;
 
   if v_row.status='checkout_criado' then
     if v_row.provedor <> v_provedor
        or v_row.provedor_checkout_id <> v_checkout_id
-       or v_row.checkout_url <> v_url then
+       or v_row.checkout_url <> v_url
+       or v_row.checkout_metadata is distinct from p_metadata then
       raise exception using errcode='23505', message='Checkout ja registrado com dados divergentes';
     end if;
 
@@ -286,6 +301,7 @@ begin
       provedor=v_provedor,
       provedor_checkout_id=v_checkout_id,
       checkout_url=v_url,
+      checkout_metadata=p_metadata,
       metadata=metadata || p_metadata,
       updated_at=now()
   where id=v_row.id;
