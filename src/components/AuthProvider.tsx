@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import type { Session } from '@supabase/supabase-js'
 import { supabase, supabaseConfigError } from '../lib/supabase'
-import type { MeuContexto, MeuContextoEmpresa, VinculoEmpresa } from '../types/auth'
+import type { MeuContexto, MeuContextoEmpresa, VinculoEmpresa, WorkspaceCommercial } from '../types/auth'
 import { AuthContext, type AuthContextValue } from '../lib/authContext'
 
 const tenantStorageKey = (userId: string) => `bpf-manager:empresa-ativa:${userId}`
@@ -11,6 +11,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [contexto, setContexto] = useState<MeuContexto | null>(null)
   const [vinculos, setVinculos] = useState<VinculoEmpresa[]>([])
   const [empresaAtivaId, setEmpresaAtivaId] = useState<string | null>(null)
+  const [workspaceCommercial, setWorkspaceCommercial] = useState<WorkspaceCommercial | null>(null)
   const [loading, setLoading] = useState(!supabaseConfigError)
   const [contextoError, setContextoError] = useState<string | null>(supabaseConfigError)
 
@@ -33,11 +34,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { contexto: data as MeuContextoEmpresa, error: null }
   }, [])
 
+  const loadWorkspaceCommercial = useCallback(async (empresaId: string) => {
+    const { data, error } = await supabase
+      .rpc('meu_workspace_comercial', { p_empresa_id: empresaId })
+      .maybeSingle()
+
+    if (error || !data) return null
+    return data as WorkspaceCommercial
+  }, [])
+
   const loadContexto = useCallback(async (activeSession: Session | null) => {
     if (supabaseConfigError) {
       setContexto(null)
       setVinculos([])
       setEmpresaAtivaId(null)
+      setWorkspaceCommercial(null)
       setContextoError(supabaseConfigError)
       return
     }
@@ -46,6 +57,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setContexto(null)
       setVinculos([])
       setEmpresaAtivaId(null)
+      setWorkspaceCommercial(null)
       setContextoError(null)
       return
     }
@@ -56,6 +68,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (vinculosError) {
       setVinculos([])
       setEmpresaAtivaId(legacy.contexto?.empresa_id ?? null)
+      setWorkspaceCommercial(null)
       setContexto(legacy.contexto)
       setContextoError(legacy.error ? 'Não foi possível carregar seu contexto de acesso.' : null)
       return
@@ -66,6 +79,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     if (nextVinculos.length === 0) {
       setEmpresaAtivaId(legacy.contexto?.empresa_id ?? null)
+      setWorkspaceCommercial(null)
       setContexto(legacy.contexto)
       setContextoError(legacy.error ? 'Não foi possível carregar seu contexto de acesso.' : null)
       return
@@ -83,15 +97,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!tenant.contexto) {
       setContexto(null)
       setEmpresaAtivaId(null)
+      setWorkspaceCommercial(null)
       setContextoError('Não foi possível validar a empresa ativa para sua sessão.')
       return
     }
 
+    const commercial = await loadWorkspaceCommercial(empresaId)
     window.localStorage.setItem(tenantStorageKey(activeSession.user.id), empresaId)
     setEmpresaAtivaId(empresaId)
+    setWorkspaceCommercial(commercial)
     setContexto(tenant.contexto)
     setContextoError(null)
-  }, [loadLegacyContexto, loadTenantContexto])
+  }, [loadLegacyContexto, loadTenantContexto, loadWorkspaceCommercial])
 
   useEffect(() => {
     if (supabaseConfigError) return
@@ -126,6 +143,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     contexto,
     vinculos,
     empresaAtivaId,
+    workspaceCommercial,
     loading,
     contextoError,
     signIn: async (email, password) => {
@@ -186,8 +204,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try {
         const tenant = await loadTenantContexto(empresaId)
         if (!tenant.contexto) return 'Não foi possível validar o acesso à empresa selecionada.'
+        const commercial = await loadWorkspaceCommercial(empresaId)
         window.localStorage.setItem(tenantStorageKey(session.user.id), empresaId)
         setEmpresaAtivaId(empresaId)
+        setWorkspaceCommercial(commercial)
         setContexto(tenant.contexto)
         setContextoError(null)
         return null
@@ -195,7 +215,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setLoading(false)
       }
     },
-  }), [session, contexto, vinculos, empresaAtivaId, loading, contextoError, loadContexto, loadTenantContexto])
+  }), [session, contexto, vinculos, empresaAtivaId, workspaceCommercial, loading, contextoError, loadContexto, loadTenantContexto, loadWorkspaceCommercial])
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }
