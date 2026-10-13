@@ -18,7 +18,7 @@ export function ProtectedRoute() {
   if (contexto.status === 'pendente') return <AccessState title="Acesso aguardando aprovação" message="Seu cadastro foi criado, mas ainda precisa ser vinculado a uma empresa, unidade e perfil de acesso." action={() => void signOut()} />
   if (contexto.status === 'inativo' || contexto.status === 'bloqueado' || !contexto.ativo) return <AccessState title="Acesso indisponível" message="Seu usuário está inativo ou bloqueado. Procure o administrador responsável pela sua organização." action={() => void signOut()} />
   if (!contexto.empresa_id) return <AccessState title="Empresa não vinculada" message="Seu usuário ainda não está vinculado a uma empresa." action={() => void signOut()} />
-  if (workspaceCommercial && workspaceCommercial.onboarding_status !== 'concluido' && location.pathname !== '/onboarding') return <Navigate to="/onboarding" replace />
+  if (workspaceCommercial && workspaceCommercial.modo_acesso === 'normal' && workspaceCommercial.onboarding_status !== 'concluido' && location.pathname !== '/onboarding') return <Navigate to="/onboarding" replace />
 
   return <Outlet />
 }
