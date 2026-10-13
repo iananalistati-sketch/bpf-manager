@@ -61,7 +61,11 @@ Deno.serve(async (req: Request) => {
   const nomeFantasia = body.nomeFantasia?.trim() ?? ''
   const unidadeNome = body.unidadeNome?.trim() ?? ''
 
-  if (razaoSocial.length < 2 || nomeFantasia.length < 2 || unidadeNome.length < 2) {
+  if (
+    razaoSocial.length < 2 || razaoSocial.length > 180
+    || nomeFantasia.length < 2 || nomeFantasia.length > 120
+    || unidadeNome.length < 2 || unidadeNome.length > 120
+  ) {
     return json(400, requestId, {
       error: 'Preencha razão social, nome da empresa e unidade principal.',
       code: 'TRIAL_INVALID_PAYLOAD',
