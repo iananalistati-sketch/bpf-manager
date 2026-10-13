@@ -155,6 +155,18 @@ A política de grace period, preços, periodicidade, prorrata e fornecedor de pa
 
 A confirmação de pagamento deve ocorrer no backend por evento confiável do provedor, tipicamente webhook.
 
+Antes do checkout externo, o backend deve criar uma **intenção de contratação** separada da assinatura atual. Essa intenção:
+
+- é criada apenas para owner ativo do workspace;
+- referencia o plano de destino sem alterar imediatamente `empresa_assinaturas` ou `empresa_planos`;
+- valida previamente se o consumo atual cabe no plano solicitado;
+- usa chave de idempotência própria;
+- possui expiração curta;
+- só recebe `checkout_url` e identificadores externos por adapter confiável do backend;
+- nunca converte o workspace para `active` por conta própria.
+
+A Edge Function `start-subscription` representa essa primeira etapa. Enquanto nenhum provedor de pagamento real estiver definido, ela pode preparar a intenção, mas deve informar explicitamente que ainda é necessário um adapter de checkout. Não deve existir checkout fictício nem confirmação simulada em produção.
+
 O frontend nunca deve transformar um usuário em administrador apenas porque uma tela de checkout retornou sucesso.
 
 O provisionamento pós-pagamento deve ser idempotente e criar/ativar de forma controlada:
