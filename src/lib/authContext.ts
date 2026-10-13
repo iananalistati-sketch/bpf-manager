@@ -1,6 +1,6 @@
 import { createContext } from 'react'
 import type { Session } from '@supabase/supabase-js'
-import type { MeuContexto, VinculoEmpresa } from '../types/auth'
+import type { MeuContexto, VinculoEmpresa, WorkspaceCommercial } from '../types/auth'
 
 type SignUpResult = { error: string | null; needsEmailConfirmation: boolean }
 export type AuthContextValue = {
@@ -8,6 +8,7 @@ export type AuthContextValue = {
   contexto: MeuContexto | null
   vinculos: VinculoEmpresa[]
   empresaAtivaId: string | null
+  workspaceCommercial: WorkspaceCommercial | null
   loading: boolean
   contextoError: string | null
   signIn: (email: string, password: string) => Promise<string | null>
