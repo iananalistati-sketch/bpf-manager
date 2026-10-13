@@ -52,7 +52,7 @@ export function TrialSetupPage() {
       }
 
       await refreshContexto()
-      navigate('/dashboard', { replace: true })
+      navigate('/onboarding', { replace: true })
     } finally {
       setSubmitting(false)
     }
