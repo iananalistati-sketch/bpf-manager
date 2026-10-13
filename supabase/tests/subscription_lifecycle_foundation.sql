@@ -335,6 +335,12 @@ begin
   if has_table_privilege('authenticated','public.assinatura_eventos','SELECT,INSERT,UPDATE,DELETE') then
     raise exception 'authenticated unexpectedly has direct commercial event access';
   end if;
+  if has_table_privilege('anon','public.assinatura_eventos','SELECT,INSERT,UPDATE,DELETE') then
+    raise exception 'anon unexpectedly has direct commercial event access';
+  end if;
+  if has_table_privilege('service_role','public.assinatura_eventos','SELECT,INSERT,UPDATE,DELETE') then
+    raise exception 'service_role unexpectedly has direct commercial event access outside the RPC';
+  end if;
 end
 $block$;
 
