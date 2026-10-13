@@ -7,7 +7,7 @@ import { useAuth } from '../hooks/useAuth'
 type AuthMode = 'login' | 'signup' | 'forgot'
 
 export function LoginPage() {
-  const { session, contexto, vinculos, loading, signIn, signUp, requestPasswordReset } = useAuth()
+  const { session, contexto, vinculos, workspaceCommercial, loading, signIn, signUp, requestPasswordReset } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
   const [mode, setMode] = useState<AuthMode>('login')
@@ -22,7 +22,11 @@ export function LoginPage() {
 
   if (!loading && session) {
     const hasWorkspace = Boolean(contexto?.empresa_id) || vinculos.length > 0
-    return <Navigate to={hasWorkspace ? '/dashboard' : '/iniciar-trial'} replace />
+    if (!hasWorkspace) return <Navigate to="/iniciar-trial" replace />
+    if (workspaceCommercial && workspaceCommercial.onboarding_status !== 'concluido') {
+      return <Navigate to="/onboarding" replace />
+    }
+    return <Navigate to="/dashboard" replace />
   }
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
