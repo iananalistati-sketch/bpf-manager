@@ -31,3 +31,18 @@ export interface MeuContextoEmpresa extends MeuContexto {
   empresa_id: string
   is_owner: boolean
 }
+
+
+export interface WorkspaceCommercial {
+  empresa_id: string
+  plano_codigo: string | null
+  plano_nome: string | null
+  assinatura_status: 'trialing' | 'active' | 'past_due' | 'paused' | 'canceled' | 'expired'
+  trial_inicio: string | null
+  trial_fim: string | null
+  trial_expirado: boolean
+  dias_trial_restantes: number
+  modo_acesso: 'normal' | 'somente_leitura'
+  onboarding_status: 'nao_iniciado' | 'em_andamento' | 'concluido'
+  onboarding_etapa: string | null
+}
