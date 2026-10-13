@@ -305,7 +305,7 @@ begin
   if v_status_novo='active' then
     insert into public.empresa_planos(empresa_id,plano_id,origem,assigned_at,assigned_by,updated_at)
     values(p_empresa_id,v_plano_id,'assinatura',now(),null,now())
-    on conflict (empresa_id) do update
+    on conflict on constraint empresa_planos_pkey do update
       set plano_id=excluded.plano_id,
           origem='assinatura',
           assigned_at=excluded.assigned_at,
