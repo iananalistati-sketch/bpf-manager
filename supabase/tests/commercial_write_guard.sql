@@ -10,6 +10,26 @@ where not exists (
   select 1 from public.perfis where is_system and empresa_id is null and lower(nome)=lower('Administrador') and ativo
 );
 
+-- O provisionamento atribui o perfil Administrador, mas esta suite precisa montar
+-- explicitamente as permissoes exigidas pelos comandos administrativos que serao testados.
+insert into public.permissoes(codigo,modulo,acao)
+values
+  ('configuracoes.visualizar','configuracoes','visualizar'),
+  ('usuarios.gerenciar','usuarios','gerenciar'),
+  ('estrutura.gerenciar','estrutura','gerenciar')
+on conflict (codigo) do nothing;
+
+insert into public.perfil_permissoes(perfil_id,permissao_id)
+select p.id,pm.id
+from public.perfis p
+join public.permissoes pm
+  on pm.codigo in ('configuracoes.visualizar','usuarios.gerenciar','estrutura.gerenciar')
+where p.is_system
+  and p.empresa_id is null
+  and p.ativo
+  and lower(p.nome)=lower('Administrador')
+on conflict (perfil_id,permissao_id) do nothing;
+
 set local role service_role;
 select * from public.provisionar_trial_server(
   'b1000000-0000-0000-0000-000000000001',
