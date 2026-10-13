@@ -126,6 +126,31 @@ Estados mínimos previstos:
 
 A estrutura deve aceitar integração futura com provedor de pagamento sem acoplar o domínio a um fornecedor específico.
 
+### Fundação técnica do ciclo de assinatura
+
+No Marco 1.5, o domínio de assinatura passa a adotar um contrato de backend independente do provedor:
+
+- eventos externos são identificados por `provedor + provedor_evento_id` e processados de forma idempotente;
+- o payload comercial relevante fica vinculado ao evento processado para impedir reutilização da mesma chave com conteúdo divergente;
+- eventos fora de ordem podem ser preservados no histórico, mas não podem retroceder o estado atual do workspace;
+- alterações de plano só entram em vigor após evento confiável que confirme estado `active`;
+- downgrade para um plano menor deve ser recusado quando os usuários ou unidades ativos já excederem os limites do plano de destino;
+- troca de provedor ou de referência da assinatura não pode ocorrer silenciosamente durante uma assinatura corrente;
+- somente backend privilegiado pode processar eventos comerciais; frontend, `anon` e usuários autenticados não recebem esse poder;
+- `empresa_assinaturas` continua representando o estado comercial atual e `assinatura_eventos` mantém o histórico técnico dos eventos recebidos.
+
+Matriz inicial de transições aceita pelo domínio:
+
+- `trialing → active | canceled | expired`;
+- `active → past_due | paused | canceled | expired`;
+- `past_due → active | paused | canceled | expired`;
+- `paused → active | canceled | expired`;
+- `canceled → active | expired`;
+- `expired → active`;
+- repetição do mesmo estado é aceita para sincronizações/renovações idempotentes do provedor.
+
+A política de grace period, preços, periodicidade, prorrata e fornecedor de pagamento permanece deliberadamente fora dessa fundação e deve continuar configurável.
+
 ## Pagamento e provisionamento
 
 A confirmação de pagamento deve ocorrer no backend por evento confiável do provedor, tipicamente webhook.
