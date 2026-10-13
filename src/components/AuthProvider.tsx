@@ -133,10 +133,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const { error } = await supabase.auth.signInWithPassword({ email, password })
       return error ? 'E-mail ou senha inválidos.' : null
     },
-    signUp: async (email, password) => {
+    signUp: async (email, password, nome) => {
       if (supabaseConfigError) return { error: supabaseConfigError, needsEmailConfirmation: false }
 
-      const { data, error } = await supabase.auth.signUp({ email, password })
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: { nome: nome.trim() },
+          emailRedirectTo: `${window.location.origin}/login?trial=1`,
+        },
+      })
       if (error) {
         return {
           error: error.message.toLowerCase().includes('password')
