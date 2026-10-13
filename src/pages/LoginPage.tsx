@@ -23,7 +23,7 @@ export function LoginPage() {
   if (!loading && session) {
     const hasWorkspace = Boolean(contexto?.empresa_id) || vinculos.length > 0
     if (!hasWorkspace) return <Navigate to="/iniciar-trial" replace />
-    if (workspaceCommercial && workspaceCommercial.onboarding_status !== 'concluido') {
+    if (workspaceCommercial && workspaceCommercial.modo_acesso === 'normal' && workspaceCommercial.onboarding_status !== 'concluido') {
       return <Navigate to="/onboarding" replace />
     }
     return <Navigate to="/dashboard" replace />
