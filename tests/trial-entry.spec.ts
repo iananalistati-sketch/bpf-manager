@@ -33,7 +33,7 @@ const activeContext = {
   permissoes: ['dashboard.visualizar'],
 }
 
-test('conta autenticada sem workspace é direcionada ao provisionamento e entra no dashboard após o trial', async ({ page }) => {
+test('self-service percorre provisionamento, onboarding e libera o dashboard', async ({ page }) => {
   await page.addInitScript(({ userId }) => {
     const user = {
       id: userId,
@@ -55,7 +55,9 @@ test('conta autenticada sem workspace é direcionada ao provisionamento e entra 
   }, { userId })
 
   let provisioned = false
+  let onboarded = false
   let provisionPayload: Record<string, unknown> | null = null
+  let onboardingPayload: Record<string, unknown> | null = null
 
   await page.route('https://bpf-test.supabase.co/**', async route => {
     const request = route.request()
@@ -85,6 +87,41 @@ test('conta autenticada sem workspace é direcionada ao provisionamento e entra 
       return route.fulfill({ status: 200, json: provisioned ? [{ ...activeContext, membership_id: membershipId, is_owner: true }] : [] })
     }
 
+    if (url.pathname.endsWith('/rest/v1/rpc/meu_workspace_comercial')) {
+      return route.fulfill({
+        status: 200,
+        json: provisioned ? [{
+          empresa_id: companyId,
+          plano_codigo: 'basic',
+          plano_nome: 'Basic',
+          assinatura_status: 'trialing',
+          trial_inicio: '2026-10-13T14:00:00Z',
+          trial_fim: '2026-10-27T14:00:00Z',
+          trial_expirado: false,
+          dias_trial_restantes: 14,
+          modo_acesso: 'normal',
+          onboarding_status: onboarded ? 'concluido' : 'nao_iniciado',
+          onboarding_etapa: onboarded ? 'concluido' : 'empresa',
+        }] : [],
+      })
+    }
+
+    if (url.pathname.endsWith('/rest/v1/rpc/atualizar_meu_onboarding')) {
+      onboardingPayload = JSON.parse(request.postData() ?? '{}')
+      onboarded = true
+      return route.fulfill({
+        status: 200,
+        json: [{
+          empresa_id: companyId,
+          status: 'concluido',
+          etapa_atual: 'concluido',
+          dados: onboardingPayload,
+          started_at: '2026-10-13T14:05:00Z',
+          completed_at: '2026-10-13T14:06:00Z',
+        }],
+      })
+    }
+
     if (url.pathname.endsWith('/functions/v1/start-trial')) {
       provisionPayload = JSON.parse(request.postData() ?? '{}')
       provisioned = true
@@ -112,12 +149,21 @@ test('conta autenticada sem workspace é direcionada ao provisionamento e entra 
   await page.getByLabel('Unidade principal').fill('Unidade Principal')
   await page.getByRole('button', { name: 'Iniciar meu trial' }).click()
 
+  await expect(page).toHaveURL(/\/onboarding$/)
+  await expect(page.getByRole('heading', { name: 'Configure o primeiro acesso' })).toBeVisible()
+  await page.getByLabel('Responsável técnico').fill('Dra. Responsável')
+  await page.getByLabel('Tipo de operação').selectOption('fabricacao')
+  await page.getByLabel('Setores principais').fill('Recebimento, Produção, Qualidade')
+  await page.getByRole('button', { name: 'Concluir e acessar o BPF Manager' }).click()
+
   await expect(page).toHaveURL(/\/dashboard$/)
   expect(provisionPayload).toEqual({
     razaoSocial: 'Fábrica Trial Ltda',
     nomeFantasia: 'Fábrica Trial',
     unidadeNome: 'Unidade Principal',
   })
+  expect(JSON.stringify(onboardingPayload)).toContain('Dra. Responsável')
+  expect(JSON.stringify(onboardingPayload)).toContain('Recebimento')
 })
 
 test('cadastro público envia nome do owner e comunica confirmação antes do trial', async ({ page }) => {
