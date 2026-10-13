@@ -105,6 +105,7 @@ declare
   v_consumo_usuarios bigint;
   v_consumo_unidades bigint;
   v_transicao_valida boolean;
+  v_troca_provedor boolean;
 begin
   if p_empresa_id is null
      or length(v_provedor) < 2 or length(v_provedor) > 60
@@ -203,8 +204,9 @@ begin
     return;
   end if;
 
-  if v_assinatura.provedor is not null
-     and v_assinatura.provedor <> v_provedor
+  v_troca_provedor := v_assinatura.provedor is not null and v_assinatura.provedor <> v_provedor;
+
+  if v_troca_provedor
      and v_assinatura.status not in ('canceled','expired') then
     raise exception using errcode='23514', message='Provedor da assinatura nao pode ser alterado neste estado';
   end if;
@@ -245,7 +247,10 @@ begin
        or coalesce(p_periodo_fim,v_assinatura.periodo_fim) <= coalesce(p_periodo_inicio,v_assinatura.periodo_inicio) then
       raise exception using errcode='22023', message='Assinatura ativa exige periodo de vigencia valido';
     end if;
-    if coalesce(v_assinatura_ref,v_assinatura.provedor_assinatura_id) is null then
+    if coalesce(
+         v_assinatura_ref,
+         case when v_troca_provedor then null else v_assinatura.provedor_assinatura_id end
+       ) is null then
       raise exception using errcode='22023', message='Assinatura ativa exige referencia no provedor';
     end if;
 
@@ -287,9 +292,9 @@ begin
       periodo_inicio=coalesce(p_periodo_inicio,ea.periodo_inicio),
       periodo_fim=coalesce(p_periodo_fim,ea.periodo_fim),
       provedor=v_provedor,
-      provedor_cliente_id=coalesce(v_cliente_ref,ea.provedor_cliente_id),
-      provedor_assinatura_id=coalesce(v_assinatura_ref,ea.provedor_assinatura_id),
-      provedor_preco_id=coalesce(v_preco_ref,ea.provedor_preco_id),
+      provedor_cliente_id=case when v_troca_provedor then v_cliente_ref else coalesce(v_cliente_ref,ea.provedor_cliente_id) end,
+      provedor_assinatura_id=case when v_troca_provedor then v_assinatura_ref else coalesce(v_assinatura_ref,ea.provedor_assinatura_id) end,
+      provedor_preco_id=case when v_troca_provedor then v_preco_ref else coalesce(v_preco_ref,ea.provedor_preco_id) end,
       metadata=ea.metadata || p_metadata || jsonb_build_object('ultimo_tipo_evento',v_tipo,'ultimo_evento_id',v_evento_ref),
       converted_at=case when v_status_novo='active' then coalesce(ea.converted_at,v_ocorrido_em) else ea.converted_at end,
       status_changed_at=case when ea.status is distinct from v_status_novo then v_ocorrido_em else ea.status_changed_at end,
