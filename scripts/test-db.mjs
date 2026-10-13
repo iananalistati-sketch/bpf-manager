@@ -21,7 +21,7 @@ const testSuites = (await readdir(testsDir, { withFileTypes: true }))
 if (migrations.length === 0) throw new Error('No versioned migrations found')
 if (testSuites.length === 0) throw new Error('No SQL test suites found')
 
-const membershipMigration = 'supabase/migrations/20260923143000_membership_compatibility_foundation.sql'
+const membershipMigration = 'supabase/migrations/20260923171840_membership_compatibility_foundation.sql'
 if (!migrations.includes(membershipMigration)) throw new Error('Membership compatibility migration is missing')
 
 const db = await PGlite.create()
