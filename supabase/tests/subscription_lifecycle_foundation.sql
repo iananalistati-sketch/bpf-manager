@@ -25,11 +25,29 @@ select sp.empresa_id, ea.id as assinatura_id
 from public.saas_provisionamentos sp
 join public.empresa_assinaturas ea on ea.empresa_id=sp.empresa_id
 where sp.chave_idempotencia='trial-billing-lifecycle-20261013';
-grant select on qa_subscription to authenticated, service_role;
+
+create temp table qa_clock as
+select now() as t0, now() as periodo_inicio, now()+interval '30 days' as periodo_fim;
+
+create temp table qa_activation (
+  assinatura_id uuid,
+  empresa_id uuid,
+  status text,
+  plano_id uuid,
+  evento_id uuid,
+  aplicado boolean
+);
+
+create temp table qa_retry (like qa_activation);
+create temp table qa_stale (like qa_activation);
+
+grant select on qa_subscription, qa_clock to authenticated, service_role;
+grant select, insert on qa_activation, qa_retry, qa_stale to service_role;
+grant select on qa_activation, qa_retry, qa_stale to authenticated;
 
 -- Confirmacao confiavel de pagamento converte trial -> active, troca o plano e registra o evento.
 set local role service_role;
-create temp table qa_activation as
+insert into qa_activation
 select * from public.processar_evento_assinatura_server(
   (select empresa_id from qa_subscription),
   'qa-pay',
@@ -40,9 +58,9 @@ select * from public.processar_evento_assinatura_server(
   'cus-qa-001',
   'sub-qa-001',
   'price-business-001',
-  now(),
-  now()+interval '30 days',
-  now(),
+  (select periodo_inicio from qa_clock),
+  (select periodo_fim from qa_clock),
+  (select t0 from qa_clock),
   '{"source":"qa"}'::jsonb
 );
 reset role;
@@ -80,7 +98,14 @@ begin
 
   select count(*) into v_count
   from public.assinatura_eventos ae
-  where ae.empresa_id=v_empresa and ae.provedor='qa-pay' and ae.provedor_evento_id='evt-activation-001' and ae.aplicado;
+  where ae.empresa_id=v_empresa
+    and ae.provedor='qa-pay'
+    and ae.provedor_evento_id='evt-activation-001'
+    and ae.plano_codigo_solicitado='business'
+    and ae.provedor_cliente_id='cus-qa-001'
+    and ae.provedor_assinatura_id='sub-qa-001'
+    and ae.provedor_preco_id='price-business-001'
+    and ae.aplicado;
   if v_count <> 1 then raise exception 'activation event history missing'; end if;
 
   if not exists (select 1 from qa_activation where aplicado and status='active') then
@@ -91,7 +116,7 @@ $block$;
 
 -- Retry identico e side-effect free.
 set local role service_role;
-create temp table qa_retry as
+insert into qa_retry
 select * from public.processar_evento_assinatura_server(
   (select empresa_id from qa_subscription),
   'qa-pay',
@@ -102,9 +127,9 @@ select * from public.processar_evento_assinatura_server(
   'cus-qa-001',
   'sub-qa-001',
   'price-business-001',
-  (select periodo_inicio from public.empresa_assinaturas where empresa_id=(select empresa_id from qa_subscription)),
-  (select periodo_fim from public.empresa_assinaturas where empresa_id=(select empresa_id from qa_subscription)),
-  (select ocorrido_em from public.assinatura_eventos where provedor='qa-pay' and provedor_evento_id='evt-activation-001'),
+  (select periodo_inicio from qa_clock),
+  (select periodo_fim from qa_clock),
+  (select t0 from qa_clock),
   '{"source":"qa"}'::jsonb
 );
 reset role;
@@ -129,8 +154,10 @@ begin
   begin
     perform public.processar_evento_assinatura_server(
       (select empresa_id from qa_subscription),
-      'qa-pay','evt-activation-001','subscription.activated','past_due',
-      null,null,'sub-qa-001',null,null,null,now(),'{"source":"tampered"}'::jsonb
+      'qa-pay','evt-activation-001','subscription.activated','active',
+      'professional','cus-qa-001','sub-qa-001','price-professional-001',
+      (select periodo_inicio from qa_clock),(select periodo_fim from qa_clock),(select t0 from qa_clock),
+      '{"source":"qa"}'::jsonb
     );
     raise exception 'expected divergent provider event rejection';
   exception when unique_violation then null;
@@ -144,7 +171,7 @@ set local role service_role;
 select * from public.processar_evento_assinatura_server(
   (select empresa_id from qa_subscription),
   'qa-pay','evt-past-due-001','invoice.payment_failed','past_due',
-  null,null,'sub-qa-001',null,null,null,now()+interval '1 minute','{}'::jsonb
+  null,null,'sub-qa-001',null,null,null,(select t0+interval '1 minute' from qa_clock),'{}'::jsonb
 );
 reset role;
 
@@ -167,7 +194,7 @@ set local role service_role;
 select * from public.processar_evento_assinatura_server(
   (select empresa_id from qa_subscription),
   'qa-pay','evt-recovered-001','invoice.payment_succeeded','active',
-  null,null,'sub-qa-001',null,null,null,now()+interval '2 minutes','{}'::jsonb
+  null,null,'sub-qa-001',null,null,null,(select t0+interval '2 minutes' from qa_clock),'{}'::jsonb
 );
 reset role;
 
@@ -184,13 +211,13 @@ end
 $block$;
 reset role;
 
--- Evento antigo e valido pela matriz nao pode retroceder o estado atual.
+-- Evento antigo, inclusive de estado que ja nao faria sentido hoje, nao pode retroceder o workspace.
 set local role service_role;
-create temp table qa_stale as
+insert into qa_stale
 select * from public.processar_evento_assinatura_server(
   (select empresa_id from qa_subscription),
-  'qa-pay','evt-stale-001','invoice.payment_failed','past_due',
-  null,null,'sub-qa-001',null,null,null,now()-interval '1 hour','{"delayed":true}'::jsonb
+  'qa-pay','evt-stale-001','subscription.created','trialing',
+  null,null,'sub-qa-001',null,null,null,(select t0-interval '1 hour' from qa_clock),'{"delayed":true}'::jsonb
 );
 reset role;
 
@@ -220,7 +247,8 @@ begin
     perform public.processar_evento_assinatura_server(
       (select empresa_id from qa_subscription),
       'qa-pay','evt-downgrade-001','subscription.plan_changed','active',
-      'basic',null,'sub-qa-001','price-basic-001',null,null,now()+interval '3 minutes','{}'::jsonb
+      'basic',null,'sub-qa-001','price-basic-001',null,null,
+      (select t0+interval '3 minutes' from qa_clock),'{}'::jsonb
     );
     raise exception 'expected incompatible downgrade rejection';
   exception when check_violation then
@@ -253,11 +281,31 @@ begin
     perform public.processar_evento_assinatura_server(
       (select empresa_id from qa_subscription),
       'qa-pay','evt-invalid-transition-001','subscription.invalid','trialing',
-      null,null,'sub-qa-001',null,null,null,now()+interval '4 minutes','{}'::jsonb
+      null,null,'sub-qa-001',null,null,null,
+      (select t0+interval '4 minutes' from qa_clock),'{}'::jsonb
     );
     raise exception 'expected invalid commercial transition rejection';
   exception when check_violation then
     if sqlerrm not like 'Transicao comercial invalida:%' then raise; end if;
+  end;
+end
+$block$;
+reset role;
+
+-- Troca silenciosa de provedor enquanto a assinatura esta ativa deve falhar fechada.
+set local role service_role;
+do $block$
+begin
+  begin
+    perform public.processar_evento_assinatura_server(
+      (select empresa_id from qa_subscription),
+      'outro-pay','evt-provider-swap-001','subscription.updated','active',
+      null,null,'sub-other-001',null,null,null,
+      (select t0+interval '5 minutes' from qa_clock),'{}'::jsonb
+    );
+    raise exception 'expected provider swap rejection';
+  exception when check_violation then
+    if sqlerrm <> 'Provedor da assinatura nao pode ser alterado neste estado' then raise; end if;
   end;
 end
 $block$;
@@ -290,5 +338,5 @@ begin
 end
 $block$;
 
-select 'PASS: subscription lifecycle converts trial safely, enforces idempotency/order/transitions/capacity, toggles read-only state and keeps billing writes server-only' as result;
+select 'PASS: subscription lifecycle converts trial safely, enforces idempotency/order/transitions/capacity/provider binding, toggles read-only state and keeps billing writes server-only' as result;
 rollback;
