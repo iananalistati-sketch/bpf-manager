@@ -65,8 +65,10 @@ begin
   end if;
 
   if p_dados ? 'setores' then
-    if jsonb_typeof(p_dados->'setores') <> 'array'
-       or jsonb_array_length(p_dados->'setores') < 1
+    if jsonb_typeof(p_dados->'setores') <> 'array' then
+      raise exception using errcode='22023', message='Setores do onboarding invalidos';
+    end if;
+    if jsonb_array_length(p_dados->'setores') < 1
        or jsonb_array_length(p_dados->'setores') > 50 then
       raise exception using errcode='22023', message='Setores do onboarding invalidos';
     end if;
@@ -126,13 +128,15 @@ begin
 
   v_dados_merged := v_before.dados || p_dados;
 
-  if p_concluir and (
-    length(btrim(coalesce(v_dados_merged->>'responsavel_tecnico',''))) < 2
-    or not (coalesce(v_dados_merged->>'tipo_operacao','') = any(array['fabricacao','armazenamento','distribuicao','mista','outra']))
-    or jsonb_typeof(v_dados_merged->'setores') is distinct from 'array'
-    or coalesce(jsonb_array_length(v_dados_merged->'setores'),0) < 1
-  ) then
-    raise exception using errcode='22023', message='Preencha responsavel tecnico, tipo de operacao e setores antes de concluir o onboarding';
+  if p_concluir then
+    if length(btrim(coalesce(v_dados_merged->>'responsavel_tecnico',''))) < 2
+       or not (coalesce(v_dados_merged->>'tipo_operacao','') = any(array['fabricacao','armazenamento','distribuicao','mista','outra'])) then
+      raise exception using errcode='22023', message='Preencha responsavel tecnico, tipo de operacao e setores antes de concluir o onboarding';
+    end if;
+    if jsonb_typeof(v_dados_merged->'setores') is distinct from 'array'
+       or jsonb_array_length(v_dados_merged->'setores') < 1 then
+      raise exception using errcode='22023', message='Preencha responsavel tecnico, tipo de operacao e setores antes de concluir o onboarding';
+    end if;
   end if;
 
   update public.empresa_onboarding eo
