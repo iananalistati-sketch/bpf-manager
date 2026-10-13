@@ -98,6 +98,31 @@ end
 $block$;
 reset role;
 
+-- Trial expirado permanece somente leitura, inclusive para o owner.
+update public.empresa_assinaturas
+set trial_inicio=now()-interval '15 days',
+    trial_fim=now()-interval '1 day'
+where empresa_id=(select empresa_id from qa_onboarding_empresa);
+
+select set_config('request.jwt.claim.sub','af000000-0000-0000-0000-000000000001',true);
+select set_config('request.jwt.claims','{"sub":"af000000-0000-0000-0000-000000000001","role":"authenticated"}',true);
+set local role authenticated;
+do $block$
+begin
+  begin
+    perform public.atualizar_meu_onboarding(
+      (select empresa_id from qa_onboarding_empresa),
+      'estrutura',
+      '{"setores":["Nao deve gravar"]}'::jsonb,
+      false
+    );
+    raise exception 'expected expired trial onboarding rejection';
+  exception when insufficient_privilege then null;
+  end;
+end
+$block$;
+reset role;
+
 do $block$
 begin
   if has_function_privilege('anon','public.atualizar_meu_onboarding(uuid,text,jsonb,boolean)','EXECUTE') then
@@ -112,5 +137,5 @@ begin
 end
 $block$;
 
-select 'PASS: owner onboarding merges data, audits progress/conclusion and rejects non-owner mutation' as result;
+select 'PASS: owner onboarding merges data, audits progress/conclusion, rejects non-owner mutation and respects expired-trial read-only mode' as result;
 rollback;
