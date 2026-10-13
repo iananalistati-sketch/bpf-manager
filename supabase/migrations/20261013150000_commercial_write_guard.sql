@@ -104,23 +104,6 @@ begin
 end
 $function$;
 
-create or replace function public.admin_usuario_vincular_convite(
-  p_usuario_id uuid,
-  p_unidade_id uuid,
-  p_perfil_ids uuid[],
-  p_justificativa text
-)
-returns void
-language plpgsql
-security invoker
-set search_path = ''
-as $function$
-begin
-  perform private.assert_primary_workspace_write_allowed();
-  perform private.admin_usuario_vincular_convite(p_usuario_id,p_unidade_id,p_perfil_ids,p_justificativa);
-end
-$function$;
-
 create or replace function public.admin_empresa_atualizar(
   p_razao_social text,
   p_nome_fantasia text,
@@ -224,7 +207,6 @@ $function$;
 revoke all on function public.admin_usuario_alterar_status(uuid,text,text) from public,anon,service_role;
 revoke all on function public.admin_usuario_alterar_unidade(uuid,uuid,text) from public,anon,service_role;
 revoke all on function public.admin_usuario_alterar_perfil(uuid,uuid,text,text) from public,anon,service_role;
-revoke all on function public.admin_usuario_vincular_convite(uuid,uuid,uuid[],text) from public,anon,service_role;
 revoke all on function public.admin_empresa_atualizar(text,text,text,text) from public,anon,service_role;
 revoke all on function public.admin_unidade_salvar(uuid,text,text,boolean,text) from public,anon,service_role;
 revoke all on function public.admin_setor_salvar(uuid,uuid,text,text,boolean,text) from public,anon,service_role;
@@ -234,7 +216,6 @@ revoke all on function public.admin_perfil_atualizar(uuid,text,text,boolean,uuid
 grant execute on function public.admin_usuario_alterar_status(uuid,text,text) to authenticated;
 grant execute on function public.admin_usuario_alterar_unidade(uuid,uuid,text) to authenticated;
 grant execute on function public.admin_usuario_alterar_perfil(uuid,uuid,text,text) to authenticated;
-grant execute on function public.admin_usuario_vincular_convite(uuid,uuid,uuid[],text) to authenticated;
 grant execute on function public.admin_empresa_atualizar(text,text,text,text) to authenticated;
 grant execute on function public.admin_unidade_salvar(uuid,text,text,boolean,text) to authenticated;
 grant execute on function public.admin_setor_salvar(uuid,uuid,text,text,boolean,text) to authenticated;
