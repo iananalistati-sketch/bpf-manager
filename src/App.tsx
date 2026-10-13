@@ -9,6 +9,7 @@ import { ModulePage } from './pages/ModulePage'
 import { LoginPage } from './pages/LoginPage'
 import { ResetPasswordPage } from './pages/ResetPasswordPage'
 import { TrialSetupPage } from './pages/TrialSetupPage'
+import { OnboardingPage } from './pages/OnboardingPage'
 import { navigationGroups } from './lib/navigation'
 import './App.css'
 import './auth.css'
@@ -25,6 +26,9 @@ export default function App() {
     <Route path="/login" element={<LoginPage />} />
     <Route path="/redefinir-senha" element={<ResetPasswordPage />} />
     <Route path="/iniciar-trial" element={<TrialSetupPage />} />
+    <Route path="/onboarding" element={<ProtectedRoute />}>
+      <Route index element={<OnboardingPage />} />
+    </Route>
     <Route element={<ProtectedRoute />}>
       <Route element={<MainLayout />}>
         <Route index element={<Navigate to="/dashboard" replace />} />
