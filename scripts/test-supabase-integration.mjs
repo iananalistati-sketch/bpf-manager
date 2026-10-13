@@ -70,10 +70,20 @@ const fail = (message, error) => {
 const readFunctionErrorBody = async (error) => {
   const context = error?.context
   if (!context) return null
-  if (context.body && typeof context.body === 'object') return context.body
+
+  // FunctionsHttpError exposes a Fetch Response in context. Its `body` is a
+  // ReadableStream, not the parsed JSON payload, so always try Response.json()
+  // before considering object-style compatibility fallbacks.
   if (typeof context.clone === 'function' && typeof context.json === 'function') {
-    try { return await context.clone().json() } catch { return null }
+    try { return await context.clone().json() } catch { /* continue */ }
   }
+
+  if (
+    context.body
+    && typeof context.body === 'object'
+    && typeof context.body.getReader !== 'function'
+  ) return context.body
+
   return null
 }
 
