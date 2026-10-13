@@ -52,6 +52,18 @@ begin
     raise exception using errcode='42501', message='Somente o owner ativo pode concluir o onboarding deste workspace';
   end if;
 
+  if not exists (
+    select 1
+    from public.empresa_assinaturas ea
+    where ea.empresa_id=p_empresa_id
+      and (
+        ea.status='active'
+        or (ea.status='trialing' and ea.trial_fim is not null and ea.trial_fim > now())
+      )
+  ) then
+    raise exception using errcode='42501', message='Workspace em modo somente leitura';
+  end if;
+
   select * into v_before
   from public.empresa_onboarding eo
   where eo.empresa_id=p_empresa_id
