@@ -96,6 +96,17 @@ Deno.serve(async (req: Request) => {
     return json(403, requestId, { error: 'Você não possui permissão para convidar usuários nesta empresa.', code: 'INVITE_PERMISSION_DENIED' })
   }
 
+  const { data: commercial, error: commercialError } = await caller
+    .rpc('meu_workspace_comercial', { p_empresa_id: empresaId })
+    .maybeSingle()
+  if (commercialError) {
+    logFailure(requestId, 'commercial_context', commercialError, { empresaId, actorId: context.usuario_id })
+    return json(503, requestId, { error: 'Não foi possível validar o estado comercial do workspace.', code: 'INVITE_COMMERCIAL_CONTEXT_FAILED' })
+  }
+  if (commercial?.modo_acesso === 'somente_leitura') {
+    return json(403, requestId, { error: 'O workspace está em modo somente leitura.', code: 'INVITE_WORKSPACE_READ_ONLY' })
+  }
+
   const redirectTo = resolveInviteRedirect(req)
   const inviteOptions = redirectTo
     ? { data: { nome }, redirectTo }
