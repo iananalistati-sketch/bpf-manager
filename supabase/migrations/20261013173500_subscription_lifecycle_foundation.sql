@@ -20,10 +20,13 @@ create table public.assinatura_eventos (
   empresa_id uuid not null references public.empresas(id) on update no action on delete no action,
   provedor text not null,
   provedor_evento_id text not null,
+  provedor_cliente_id text null,
   provedor_assinatura_id text null,
+  provedor_preco_id text null,
   tipo_evento text not null,
   status_anterior text null check (status_anterior is null or status_anterior in ('trialing','active','past_due','paused','canceled','expired')),
   status_novo text not null check (status_novo in ('trialing','active','past_due','paused','canceled','expired')),
+  plano_codigo_solicitado text null,
   plano_anterior_id uuid null references public.planos(id) on update no action on delete no action,
   plano_novo_id uuid null references public.planos(id) on update no action on delete no action,
   periodo_inicio timestamptz null,
@@ -88,7 +91,10 @@ declare
   v_evento_ref text := btrim(coalesce(p_provedor_evento_id,''));
   v_tipo text := btrim(coalesce(p_tipo_evento,''));
   v_status_novo text := lower(btrim(coalesce(p_status_novo,'')));
-  v_plano_codigo text := lower(btrim(coalesce(p_plano_codigo,'')));
+  v_plano_codigo text := nullif(lower(btrim(coalesce(p_plano_codigo,''))),'');
+  v_cliente_ref text := nullif(btrim(coalesce(p_provedor_cliente_id,'')),'');
+  v_assinatura_ref text := nullif(btrim(coalesce(p_provedor_assinatura_id,'')),'');
+  v_preco_ref text := nullif(btrim(coalesce(p_provedor_preco_id,'')),'');
   v_ocorrido_em timestamptz := coalesce(p_ocorrido_em, now());
   v_assinatura public.empresa_assinaturas%rowtype;
   v_evento public.assinatura_eventos%rowtype;
@@ -107,6 +113,16 @@ begin
      or length(v_tipo) < 2 or length(v_tipo) > 120
      or v_status_novo not in ('trialing','active','past_due','paused','canceled','expired') then
     raise exception using errcode='22023', message='Evento comercial invalido';
+  end if;
+
+  if (v_cliente_ref is not null and length(v_cliente_ref) > 255)
+     or (v_assinatura_ref is not null and length(v_assinatura_ref) > 255)
+     or (v_preco_ref is not null and length(v_preco_ref) > 255)
+     or (v_plano_codigo is not null and (
+       length(v_plano_codigo) > 120
+       or v_plano_codigo !~ '^[a-z0-9][a-z0-9._-]*$'
+     )) then
+    raise exception using errcode='22023', message='Referencias comerciais invalidas';
   end if;
 
   if p_metadata is null or jsonb_typeof(p_metadata) <> 'object' or pg_column_size(p_metadata) > 65536 then
@@ -129,7 +145,10 @@ begin
     if v_evento.empresa_id <> p_empresa_id
        or v_evento.tipo_evento <> v_tipo
        or v_evento.status_novo <> v_status_novo
-       or v_evento.provedor_assinatura_id is distinct from nullif(btrim(coalesce(p_provedor_assinatura_id,'')),'')
+       or v_evento.plano_codigo_solicitado is distinct from v_plano_codigo
+       or v_evento.provedor_cliente_id is distinct from v_cliente_ref
+       or v_evento.provedor_assinatura_id is distinct from v_assinatura_ref
+       or v_evento.provedor_preco_id is distinct from v_preco_ref
        or v_evento.periodo_inicio is distinct from p_periodo_inicio
        or v_evento.periodo_fim is distinct from p_periodo_fim
        or v_evento.metadata is distinct from p_metadata then
@@ -152,20 +171,7 @@ begin
     raise exception using errcode='P0002', message='Assinatura do workspace nao encontrada';
   end if;
 
-  if v_assinatura.provedor is not null
-     and v_assinatura.provedor <> v_provedor
-     and v_assinatura.status not in ('canceled','expired') then
-    raise exception using errcode='23514', message='Provedor da assinatura nao pode ser alterado neste estado';
-  end if;
-
-  if v_assinatura.provedor_assinatura_id is not null
-     and nullif(btrim(coalesce(p_provedor_assinatura_id,'')),'') is not null
-     and v_assinatura.provedor_assinatura_id <> btrim(p_provedor_assinatura_id)
-     and v_assinatura.status not in ('canceled','expired') then
-    raise exception using errcode='23514', message='Referencia da assinatura do provedor nao pode ser alterada neste estado';
-  end if;
-
-  if v_plano_codigo <> '' then
+  if v_plano_codigo is not null then
     select p.id into v_plano_id
     from public.planos p
     where p.codigo=v_plano_codigo and p.ativo;
@@ -174,6 +180,40 @@ begin
     end if;
   else
     v_plano_id := v_assinatura.plano_id;
+  end if;
+
+  -- Webhooks podem chegar fora de ordem. Eventos mais antigos sao preservados no historico,
+  -- mas nunca podem retroceder o estado comercial corrente, mesmo que sua transicao hoje
+  -- ja nao seja valida.
+  if v_assinatura.provedor_ultimo_evento_em is not null
+     and v_ocorrido_em < v_assinatura.provedor_ultimo_evento_em then
+    insert into public.assinatura_eventos(
+      assinatura_id,empresa_id,provedor,provedor_evento_id,
+      provedor_cliente_id,provedor_assinatura_id,provedor_preco_id,tipo_evento,
+      status_anterior,status_novo,plano_codigo_solicitado,plano_anterior_id,plano_novo_id,
+      periodo_inicio,periodo_fim,ocorrido_em,aplicado,motivo,metadata
+    ) values (
+      v_assinatura.id,p_empresa_id,v_provedor,v_evento_ref,
+      v_cliente_ref,v_assinatura_ref,v_preco_ref,v_tipo,
+      v_assinatura.status,v_status_novo,v_plano_codigo,v_assinatura.plano_id,v_plano_id,
+      p_periodo_inicio,p_periodo_fim,v_ocorrido_em,false,'evento_fora_de_ordem',p_metadata
+    ) returning id into v_evento_id;
+
+    return query select v_assinatura.id,p_empresa_id,v_assinatura.status,v_assinatura.plano_id,v_evento_id,false;
+    return;
+  end if;
+
+  if v_assinatura.provedor is not null
+     and v_assinatura.provedor <> v_provedor
+     and v_assinatura.status not in ('canceled','expired') then
+    raise exception using errcode='23514', message='Provedor da assinatura nao pode ser alterado neste estado';
+  end if;
+
+  if v_assinatura.provedor_assinatura_id is not null
+     and v_assinatura_ref is not null
+     and v_assinatura.provedor_assinatura_id <> v_assinatura_ref
+     and v_assinatura.status not in ('canceled','expired') then
+    raise exception using errcode='23514', message='Referencia da assinatura do provedor nao pode ser alterada neste estado';
   end if;
 
   if v_status_novo <> 'active'
@@ -196,25 +236,6 @@ begin
       message=format('Transicao comercial invalida: %s -> %s',v_assinatura.status,v_status_novo);
   end if;
 
-  -- Webhooks podem chegar fora de ordem. Eventos mais antigos sao preservados no historico,
-  -- mas nunca podem retroceder o estado comercial corrente.
-  if v_assinatura.provedor_ultimo_evento_em is not null
-     and v_ocorrido_em < v_assinatura.provedor_ultimo_evento_em then
-    insert into public.assinatura_eventos(
-      assinatura_id,empresa_id,provedor,provedor_evento_id,provedor_assinatura_id,tipo_evento,
-      status_anterior,status_novo,plano_anterior_id,plano_novo_id,
-      periodo_inicio,periodo_fim,ocorrido_em,aplicado,motivo,metadata
-    ) values (
-      v_assinatura.id,p_empresa_id,v_provedor,v_evento_ref,
-      nullif(btrim(coalesce(p_provedor_assinatura_id,'')),''),
-      v_tipo,v_assinatura.status,v_status_novo,v_assinatura.plano_id,v_plano_id,
-      p_periodo_inicio,p_periodo_fim,v_ocorrido_em,false,'evento_fora_de_ordem',p_metadata
-    ) returning id into v_evento_id;
-
-    return query select v_assinatura.id,p_empresa_id,v_assinatura.status,v_assinatura.plano_id,v_evento_id,false;
-    return;
-  end if;
-
   if v_status_novo='active' then
     if v_plano_id is null then
       raise exception using errcode='22023', message='Assinatura ativa exige plano valido';
@@ -224,7 +245,7 @@ begin
        or coalesce(p_periodo_fim,v_assinatura.periodo_fim) <= coalesce(p_periodo_inicio,v_assinatura.periodo_inicio) then
       raise exception using errcode='22023', message='Assinatura ativa exige periodo de vigencia valido';
     end if;
-    if nullif(btrim(coalesce(p_provedor_assinatura_id,v_assinatura.provedor_assinatura_id,'')),'') is null then
+    if coalesce(v_assinatura_ref,v_assinatura.provedor_assinatura_id) is null then
       raise exception using errcode='22023', message='Assinatura ativa exige referencia no provedor';
     end if;
 
@@ -266,9 +287,9 @@ begin
       periodo_inicio=coalesce(p_periodo_inicio,ea.periodo_inicio),
       periodo_fim=coalesce(p_periodo_fim,ea.periodo_fim),
       provedor=v_provedor,
-      provedor_cliente_id=coalesce(nullif(btrim(coalesce(p_provedor_cliente_id,'')),''),ea.provedor_cliente_id),
-      provedor_assinatura_id=coalesce(nullif(btrim(coalesce(p_provedor_assinatura_id,'')),''),ea.provedor_assinatura_id),
-      provedor_preco_id=coalesce(nullif(btrim(coalesce(p_provedor_preco_id,'')),''),ea.provedor_preco_id),
+      provedor_cliente_id=coalesce(v_cliente_ref,ea.provedor_cliente_id),
+      provedor_assinatura_id=coalesce(v_assinatura_ref,ea.provedor_assinatura_id),
+      provedor_preco_id=coalesce(v_preco_ref,ea.provedor_preco_id),
       metadata=ea.metadata || p_metadata || jsonb_build_object('ultimo_tipo_evento',v_tipo,'ultimo_evento_id',v_evento_ref),
       converted_at=case when v_status_novo='active' then coalesce(ea.converted_at,v_ocorrido_em) else ea.converted_at end,
       status_changed_at=case when ea.status is distinct from v_status_novo then v_ocorrido_em else ea.status_changed_at end,
@@ -288,13 +309,14 @@ begin
   end if;
 
   insert into public.assinatura_eventos(
-    assinatura_id,empresa_id,provedor,provedor_evento_id,provedor_assinatura_id,tipo_evento,
-    status_anterior,status_novo,plano_anterior_id,plano_novo_id,
+    assinatura_id,empresa_id,provedor,provedor_evento_id,
+    provedor_cliente_id,provedor_assinatura_id,provedor_preco_id,tipo_evento,
+    status_anterior,status_novo,plano_codigo_solicitado,plano_anterior_id,plano_novo_id,
     periodo_inicio,periodo_fim,ocorrido_em,aplicado,motivo,metadata
   ) values (
     v_assinatura.id,p_empresa_id,v_provedor,v_evento_ref,
-    nullif(btrim(coalesce(p_provedor_assinatura_id,'')),''),
-    v_tipo,v_assinatura.status,v_status_novo,v_assinatura.plano_id,v_plano_id,
+    v_cliente_ref,v_assinatura_ref,v_preco_ref,v_tipo,
+    v_assinatura.status,v_status_novo,v_plano_codigo,v_assinatura.plano_id,v_plano_id,
     p_periodo_inicio,p_periodo_fim,v_ocorrido_em,true,null,p_metadata
   ) returning id into v_evento_id;
 
