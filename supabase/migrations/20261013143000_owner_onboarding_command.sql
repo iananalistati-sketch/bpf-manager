@@ -75,6 +75,14 @@ begin
 
     if exists (
       select 1
+      from jsonb_array_elements(p_dados->'setores') s(valor)
+      where jsonb_typeof(s.valor) <> 'string'
+    ) then
+      raise exception using errcode='22023', message='Setores devem conter apenas nomes em texto';
+    end if;
+
+    if exists (
+      select 1
       from jsonb_array_elements_text(p_dados->'setores') s(valor)
       where length(btrim(s.valor)) < 2 or length(btrim(s.valor)) > 120
     ) then
