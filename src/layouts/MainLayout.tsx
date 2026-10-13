@@ -11,7 +11,7 @@ export function MainLayout() {
   const dialog = useRef<HTMLDialogElement>(null)
   const menuButton = useRef<HTMLButtonElement>(null)
   const location = useLocation()
-  const { contexto, vinculos, empresaAtivaId, trocarEmpresa, signOut } = useAuth()
+  const { contexto, vinculos, empresaAtivaId, workspaceCommercial, trocarEmpresa, signOut } = useAuth()
   const current = navigationGroups.flatMap(group => group.items).find(item => item.path === location.pathname)
   const closeMenu = () => { dialog.current?.close(); menuButton.current?.focus() }
   const displayName = contexto?.nome || contexto?.email || 'Usuário'
@@ -48,6 +48,12 @@ export function MainLayout() {
         <Link className="user-profile" to="/configuracoes" aria-label={`Usuário ${displayName} — configurações`}><span className="avatar">{initials}</span><span><small>Usuário</small><strong>{displayName}</strong></span></Link><button className="icon-button" type="button" aria-label="Sair" title="Sair" onClick={() => void signOut()}><LogOut size={18} /></button>
       </div>
       {tenantError && <p className="tenant-switch-error" role="alert">{tenantError}</p>}
-    </header><main id="main-content" tabIndex={-1}><Outlet /></main><footer className="workspace-footer"><span>BPF Manager · Gestão de Boas Práticas de Fabricação</span><span>{contexto?.nome_fantasia || contexto?.razao_social || 'Ambiente autenticado'}</span></footer></div>
+    </header>
+    {workspaceCommercial?.assinatura_status === 'trialing' && <aside className={`workspace-commercial-banner ${workspaceCommercial.modo_acesso}`} aria-label="Status do trial">
+      {workspaceCommercial.modo_acesso === 'normal'
+        ? <><strong>Trial ativo</strong><span>{workspaceCommercial.dias_trial_restantes} dia(s) restante(s) para explorar o BPF Manager.</span></>
+        : <><strong>Trial encerrado</strong><span>Seu workspace está em modo somente leitura. Os dados permanecem disponíveis.</span></>}
+    </aside>}
+    <main id="main-content" tabIndex={-1}><Outlet /></main><footer className="workspace-footer"><span>BPF Manager · Gestão de Boas Práticas de Fabricação</span><span>{contexto?.nome_fantasia || contexto?.razao_social || 'Ambiente autenticado'}</span></footer></div>
   </div>
 }
