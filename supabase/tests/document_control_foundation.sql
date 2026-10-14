@@ -80,7 +80,7 @@ select public.documento_criar(
   'Higienização das instalações',
   'POP',
   'Procedimento inicial controlado.',
-  current_date+interval '180 days'
+  current_date+180
 );
 
 do $block$
