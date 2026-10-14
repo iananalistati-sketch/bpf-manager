@@ -17,6 +17,8 @@ import './tenant.css'
 
 const ConfiguracoesPage = lazy(() => import('./modules/configuracoes/pages/ConfiguracoesPage')
   .then(module => ({ default: module.ConfiguracoesPage })))
+const DocumentosPage = lazy(() => import('./modules/documentos/pages/DocumentosPage')
+  .then(module => ({ default: module.DocumentosPage })))
 
 export default function App() {
   const items = navigationGroups.flatMap(group => group.items)
@@ -33,7 +35,7 @@ export default function App() {
       <Route element={<MainLayout />}>
         <Route index element={<Navigate to="/dashboard" replace />} />
         <Route path="/dashboard" element={<PermissionRoute permission={dashboard.permission}><DashboardPage /></PermissionRoute>} />
-        {items.filter(item => item.path !== '/dashboard').map(item => <Route key={item.path} path={item.path} element={<PermissionRoute permission={item.permission}>{item.path === '/configuracoes' ? <Suspense fallback={<p role="status">Carregando configurações…</p>}><ConfiguracoesPage /></Suspense> : <ModulePage module={item} />}</PermissionRoute>} />)}
+        {items.filter(item => item.path !== '/dashboard').map(item => <Route key={item.path} path={item.path} element={<PermissionRoute permission={item.permission}>{item.path === '/configuracoes' ? <Suspense fallback={<p role="status">Carregando configurações…</p>}><ConfiguracoesPage /></Suspense> : item.path === '/documentos' ? <Suspense fallback={<p role="status">Carregando documentos…</p>}><DocumentosPage /></Suspense> : <ModulePage module={item} />}</PermissionRoute>} />)}
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Route>
     </Route>
