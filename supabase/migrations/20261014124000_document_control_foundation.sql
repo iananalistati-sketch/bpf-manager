@@ -339,6 +339,7 @@ declare
   v_subject uuid := private.request_jwt_subject();
   v_empresa_id uuid;
   v_versao public.documento_versoes%rowtype;
+  v_antes jsonb;
 begin
   select d.empresa_id into v_empresa_id
   from public.documentos d
@@ -375,6 +376,16 @@ begin
     raise exception using errcode='23514', message='Somente a versao em rascunho pode ser editada';
   end if;
 
+  select jsonb_build_object(
+    'unidade_id',d.unidade_id,
+    'titulo',d.titulo,
+    'tipo',d.tipo,
+    'descricao',v_versao.descricao,
+    'revisao_prevista_em',v_versao.revisao_prevista_em
+  ) into v_antes
+  from public.documentos d
+  where d.id=p_documento_id;
+
   update public.documentos
   set unidade_id=p_unidade_id,titulo=btrim(p_titulo),tipo=btrim(p_tipo),updated_at=now()
   where id=p_documento_id;
@@ -389,8 +400,15 @@ begin
     empresa_id,unidade_id,ator_id,entidade,registro_id,acao,antes,depois,justificativa,contexto
   ) values (
     v_empresa_id,p_unidade_id,v_subject,'documento',p_documento_id,'documento.rascunho_atualizado',
-    jsonb_build_object('titulo',(select titulo from public.documentos where id=p_documento_id)),
-    jsonb_build_object('titulo',btrim(p_titulo),'tipo',btrim(p_tipo),'versao',v_versao.numero),
+    v_antes,
+    jsonb_build_object(
+      'unidade_id',p_unidade_id,
+      'titulo',btrim(p_titulo),
+      'tipo',btrim(p_tipo),
+      'descricao',nullif(btrim(coalesce(p_descricao,'')),''),
+      'revisao_prevista_em',p_revisao_prevista_em,
+      'versao',v_versao.numero
+    ),
     'Atualizacao de rascunho',
     jsonb_build_object('versao_id',v_versao.id)
   );
