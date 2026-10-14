@@ -222,7 +222,7 @@ Gestão de empresas, unidades, setores, usuários, perfis, permissões, parâmet
 
 Estado em 18/09/2026: o Marco 1 administrativo foi concluído e implantado no Supabase remoto. `/configuracoes` possui Usuários, Perfis e Permissões, Estrutura e Auditoria; alterações críticas usam RPCs auditadas; RLS e isolamento por empresa foram validados; proteção contra autoelevação, cross-tenant e remoção do último administrador efetivo está ativa; a Edge Function `admin-invite-user` está publicada com JWT obrigatório para o fluxo de convite. As migrations remotas desse marco são imutáveis.
 
-O próximo trabalho estrutural é o **Marco 1.5 — Fundação SaaS**, antes do Marco 2 operacional.
+O **Marco 1.5 — Fundação SaaS** foi concluído em sua base arquitetural: membership/tenant ativo, trial self-service, onboarding, planos/entitlements, estado comercial, ciclo abstrato de assinatura e intenções de contratação provider-neutral. A integração com o provedor de pagamento real foi deliberadamente adiada até a aplicação operacional estar madura. O trabalho corrente passa ao **Marco 2 — Documentos + Agenda BPF**.
 
 ## 7. Trilhas de auditoria
 
@@ -367,8 +367,8 @@ Antes de desenvolver uma nova funcionalidade, validar:
 ## 13. Roadmap estrutural
 
 - **Marco 1 — Administração segura:** concluído e implantado.
-- **Marco 1.5 — Fundação SaaS:** próximo marco; identidade global, membership, tenant ativo, trial, planos, entitlements, assinatura abstrata, provisionamento e onboarding.
-- **Marco 2 — Documentos + Agenda BPF.**
+- **Marco 1.5 — Fundação SaaS:** base arquitetural concluída; integração de pagamento real permanece adiada e desacoplada.
+- **Marco 2 — Documentos + Agenda BPF:** em andamento; primeira entrega implementa documentos controlados tenant-aware com versionamento, workflow, auditoria e bloqueio comercial de escrita.
 - **Marco 3 — Operação básica:** fornecedores, recebimentos, higienização, treinamentos, água, equipamentos, pragas e resíduos.
 - **Marco 4 — Qualidade:** NC/CAPA e auditorias.
 - **Marco 5 — Produção, rastreabilidade e recall.**
@@ -401,4 +401,4 @@ Se uma implementação entrar em conflito com esta referência, a divergência d
 **Projeto:** BPF Manager  
 **Documento:** Referência geral do projeto  
 **Status:** Ativo  
-**Última atualização:** 18/09/2026
+**Última atualização:** 14/10/2026
