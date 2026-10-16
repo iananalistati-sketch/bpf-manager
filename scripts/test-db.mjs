@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { PGlite } from '@electric-sql/pglite'
 import { checkNames } from './supabase-apply-documentos.mjs'
+import { testQaWorkspace } from './test-qa-workspace-db.mjs'
 
 const root = fileURLToPath(new URL('..', import.meta.url))
 const migrationsDir = join(root, 'supabase', 'migrations')
@@ -178,6 +179,8 @@ try {
       if (row.result) console.log(row.result)
     }
   }
+
+  await testQaWorkspace(db)
 
   const { rows: users } = await db.query('SELECT count(*)::int AS count FROM public.usuarios')
   if (users[0].count !== 0) throw new Error('Test fixtures were not rolled back')

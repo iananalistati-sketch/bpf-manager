@@ -72,9 +72,9 @@ export function buildCommands(root, env) {
 }
 
 // Buffer CLI output until completion so a credential split across chunks is redacted too.
-export function runCommand(args, { root, env, password, output = process.stdout, errorOutput = process.stderr, spawnProcess = spawn, parseOutput, quiet = false }) {
+export function runCommand(args, { root, env, password, output = process.stdout, errorOutput = process.stderr, spawnProcess = spawn, parseOutput, quiet = false, input }) {
   return new Promise((resolve, reject) => {
-    const child = spawnProcess(process.execPath, args, { cwd: root, env, shell: false, stdio: ['ignore', 'pipe', 'pipe'] })
+    const child = spawnProcess(process.execPath, args, { cwd: root, env, shell: false, stdio: [input === undefined ? 'ignore' : 'pipe', 'pipe', 'pipe'] })
     const stdout = []
     const stderr = []
     let size = 0
@@ -98,6 +98,10 @@ export function runCommand(args, { root, env, password, output = process.stdout,
       try { resolve({ code: status, data: parseOutput(text) }) }
       catch { reject(new Error('Resposta estruturada do CLI invalida; operacao interrompida.')) }
     })
+    if (input !== undefined) {
+      child.stdin.on('error', () => reject(new Error('Nao foi possivel enviar a consulta ao CLI. Confira o estado remoto antes de repetir uma escrita.')))
+      child.stdin.end(input)
+    }
   })
 }
 
