@@ -1,0 +1,121 @@
+# Marco 2 — Revisão consolidada de Documentos
+
+Revisão sobre `feature/supabase-auth`, base `4b3228774d6c4b60ba2a12b6049f758906557a54`. Em 16/10/2026, o usuário confirmou a aplicação das duas migrations de Documentos no projeto oficial e a aprovação dos oito checks estruturais. Smoke PostgREST autenticado, advisors e liberação dos perfis permanecem pendentes; ver o registro remoto ao final.
+
+## Contrato consolidado
+
+- `documentos` preserva identidade e código; `documento_versoes` guarda título, tipo, unidade, descrição, prazo e evidências de cada versão. Arquivos futuros devem referenciar `documento_versoes.id` em Storage privado, sem substituir evidências publicadas.
+- Durante a elaboração de v2, v1 permanece vigente e consultável. O cabeçalho mantém os metadados vigentes até publicar v2. A listagem mostra a versão mais recente e `vigente_numero`/`vigente_revisao_prevista_em`; o histórico devolve snapshots completos.
+- Publicar v2 torna v1 obsoleta e gera `documento.versao_substituida`, além de `documento.status_alterado` para v2. Tudo participa da mesma transação.
+- Permissões por membership: criar exige `documentos.criar`; editar, encaminhar/concluir revisão e iniciar nova versão exigem `documentos.editar`; aprovar, publicar e obsoletar exigem `documentos.aprovar`; consultas exigem `documentos.visualizar`.
+- Identidade global, empresa, membership e perfil devem estar ativos. A empresa é resolvida a partir do alvo nas mutações por ID; alvos externos/inexistentes não revelam seu estado.
+- O gate comercial considera a assinatura do tenant alvo. `active` e trial válido escrevem; demais estados são somente leitura. Empresas legadas sem assinatura mantêm compatibilidade. Nenhuma regra nova usa `usuarios.empresa_id` como autorização.
+- As três mutações de documento existente aceitam `p_versao_id` opcional. A UI sempre envia a versão esperada; divergência retorna `40001`. Clientes antigos continuam compatíveis, mas devem migrar para enviar esse parâmetro.
+- A UI preserva a unidade original na edição e distingue erro comercial de ausência de assinatura. Erro comercial bloqueia controles de escrita, mantendo consulta e tentativa de atualização de contexto. Respostas antigas não reaplicam contexto, lista ou histórico após troca de tenant.
+
+## Correções e compatibilidade
+
+As 30 migrations anteriores permanecem intactas. A corretiva aditiva `20261015203000_document_control_integrity.sql` acrescenta snapshots, FK composta unidade/empresa no documento, autorização antes do lock/estado e auditoria da substituição.
+
+O upgrade faz backfill de documentos com uma versão. Se encontrar múltiplas versões preexistentes, aborta antes de DDL com `55000`: os metadados históricos precisam ser reconciliados com evidências reais em tarefa específica. Copiar o título atual para versões antigas fabricaria histórico. O harness verifica upgrade v1 e rejeição atômica de histórico ambíguo.
+
+O manifesto npm foi realinhado aos ranges já registrados no lockfile (`react-hooks ^7.1.1`, `react-refresh ^0.5.6`); não houve atualização de lockfile. O Playwright usa `npm.cmd` no Windows e `npm` em outros sistemas. Chrome continua padrão; `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` permite apontar um Chromium instalado.
+
+## Matriz e gates
+
+- Agente 08: **APROVADO** após replay cumulativo, inspeção de roles/ACL/RLS/search_path e execução das mutações.
+- Agente 09: **APROVADO** após revisão adversarial consolidada e PoC do erro de autorização.
+- Agente 07: **APROVADO** após cruzar contratos SQL, frontend, autenticação, testes e limites documentados, sem bloqueadores de integração.
+- A suíte SQL executa chamadas diretas das quatro RPCs de escrita; viewer, tenant e alvo adulterados, perfil/membership/identidade/empresa desativados, fases editar/aprovar independentes, estados comerciais bloqueados, versões antigas, estados inválidos e rollback com falha injetada na auditoria.
+- Publicação com falha no último evento comprova rollback do cabeçalho, versão nova, versão anterior e auditoria de substituição. Testes cobrem JWT claims-only e membership secundário com assinatura independente da empresa primária.
+- Playwright cobre v1/v2, edição preservando unidade, permissões separadas, rota/menu, erro/recuperação, consulta somente leitura, payload de versão esperada, respostas atrasadas e layouts de 375/768/1440 px.
+- O teste SQL cria temporárias como deployer com grants mínimos; auditoria administrativa é inspecionada como deployer, sem conceder privilégios ao editor documental.
+
+QA local em 15/10/2026: `npm run validate:local` terminou com exit code 0: preflight, **31 migrations / 17 suítes SQL**, TypeScript/build, ESLint e **49 testes Playwright aprovados** (nenhum skipped). Execução Linux com Node 24.19.0, npm 11.9.0 e `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium`; foram usados dois workers. Nenhuma chamada ao Supabase oficial foi necessária. O aviso de chunk acima de 500 kB permanece não bloqueante. Os seletores antigos de heading e badge de Documentos foram tornados exatos para distinguir conteúdo e mensagens de feedback.
+
+## Limites e rollout
+
+- **Não fazer deploy antes do checkpoint local verde.** O checkpoint, o preflight e a aplicação das migrations 30 e 31 foram confirmados pelo usuário em 16/10/2026. As 31 migrations agora aplicadas são imutáveis; novas correções exigem migration adicional. Qualquer implantação futura deve conferir as pendências reais, preservar timestamps e verificar o estado remoto depois.
+- **Nenhuma concessão automática de `documentos.*`.** Antes de habilitar o módulo remotamente, revisar os perfis destinatários e atribuir as permissões por backend autorizado. O teto de delegação impede que um administrador sem essas permissões as conceda a si mesmo. Não usar bypass no frontend nem atribuir a todos os perfis.
+- As RPCs documentais mantêm o owner privilegiado usado pela camada comercial anterior: `SECURITY DEFINER`, `search_path=''`, ACL restrita e tabelas sem acesso direto para `anon`, `authenticated` ou `service_role`. RLS está habilitada, mas o owner do deployer não depende dela; a autorização explícita das RPCs continua sendo a barreira efetiva. Uma role documental restrita é evolução de defesa em profundidade, não foi introduzida nesta revisão.
+- A consulta administrativa de auditoria segue o tenant primário legado. O histórico documental tenant-aware permanece disponível para memberships secundários; a modernização da auditoria administrativa é escopo separado.
+- PGlite prova replay e comportamento SQL local, não operação real de PostgREST nem concorrência entre conexões PostgreSQL. Locks pai→versão e índices únicos foram revisados; concorrência real e smoke hospedado ficam para o gate remoto.
+- Storage/anexos reais, revisão com devolução/reprovação, segregação obrigatória de pessoas e Agenda BPF continuam fora desta entrega. O build ainda emite aviso de chunk principal acima de 500 kB.
+
+Checkpoint único no Windows: `npm.cmd run validate:local`. No Linux: `npm run validate:local`. Não requer credenciais do Supabase oficial; os testes E2E interceptam o backend de teste.
+
+## Arquivos deste ciclo
+
+- `package.json`, `playwright.config.ts`: dependências e execução portável.
+- `scripts/test-db.mjs`: upgrade documental sob dados preexistentes.
+- `src/components/AuthProvider.tsx`, `src/lib/authContext.ts`: gerações de sessão/tenant e erro comercial explícito.
+- `src/modules/documentos/pages/DocumentosPage.tsx`, `src/modules/documentos/documentos.css`: workflow, snapshots, permissões, unidade, histórico e responsividade.
+- `supabase/migrations/20261015203000_document_control_integrity.sql`: corretiva aditiva.
+- `supabase/tests/document_control_foundation.sql`: regressões funcionais e adversariais.
+- `tests/documentos.spec.ts`, `tests/documentos-regression.spec.ts`: seletores precisos e regressões de interface.
+- `docs/REFERENCIA_PROJETO.md`, este plano: contratos, decisões e limites de rollout.
+
+
+## Preflight remoto com senha local — 16/10/2026
+
+O usuario confirmou o checkpoint local. O Supabase CLI 2.121.0, entretanto, respondeu HTTP400 na criacao de login temporario: a API de gerenciamento recebeu ECONNREFUSED ao conectar ao PostgreSQL. Repetir o comando sem alterar a autenticacao nao resolve essa dependencia.
+
+Foi acrescentado `npm.cmd run supabase:preflight` (Linux/macOS: `npm run supabase:preflight`). Ele:
+
+- Exige o checkout vinculado ao projeto oficial antes de solicitar credenciais.
+- Reusa SUPABASE_DB_PASSWORD ja configurada ou pede a senha PostgreSQL em entrada oculta, sem PowerShell e sem valores no historico do terminal. A senha do banco e diferente da senha de login da aplicacao.
+- Usa a rota suportada pelo CLI que dispensa criar um login temporario. Mantem o fallback IPv4/pooler do CLI, sem alterar TLS, DNS, banco ou vinculo.
+- Fixa CLI 2.121.0, projeto oficial, perfil `supabase` e diretório do checkout. Executa Node+`npm-cli.js` com argumentos separados e sem shell, inclusive em caminhos Windows com espacos.
+- Executa somente `migration list --linked` e, se houver sucesso, `db push --linked --dry-run --skip-vault`. Nunca executa push real, reset ou repair. Nenhum argumento adicional e aceito.
+- Passa a senha apenas pelo ambiente do subprocesso, desativa debug herdado, nao grava credenciais e expurga valores da saida (inclusive entre chunks). Em overflow, descarta toda a saida. Para no primeiro erro e mantem seu status de falha.
+
+Os testes de tooling usam senhas ficticias e CLI substituto local, sem conectar ao Supabase. Cobrem segredo, comandos fixos, projeto, cancelamento, redacao e interrupcao por falha. A compatibilidade Windows foi simulada; ainda depende da execucao no computador do usuario.
+
+A alternativa contorna a chamada da API de login temporario; nao recupera um PostgreSQL realmente indisponivel. Se a conexao com senha tambem falhar, o banco remoto continua sendo uma dependencia externa. O dry-run mostra pendencias, mas nao aplica SQL nem verifica as precondicoes da corretiva 31. Na etapa de preflight, a aplicacao remota ainda estava pendente; o resultado posterior esta registrado ao final.
+
+Fontes do comportamento: Supabase CLI tag v2.121.0, `apps/cli/src/command-internal/db-config.layer.ts`, `config/project-ref.layer.ts` e `command-internal/db-push-core.ts` no repositorio oficial `supabase/cli`.
+
+
+Gates 07 e 09 do helper: APROVADOS. QA deste bloco: `validate:local` com exit code 0 (31 migrations, 17 suítes SQL, build, lint e 49 E2E); depois do ajuste de lifecycle da entrada, os 16 testes de tooling passaram novamente. Prompt oculto tambem foi exercitado em PTY Linux real, com senha ficticia, e encerrou com exit code 0. Sem execucao Windows real e sem acesso remoto. Nenhuma migration anterior foi modificada.
+
+
+## Aplicacao controlada de Documentos — 16/10/2026
+
+O usuario confirmou a execucao do preflight no projeto oficial: as 29 migrations anteriores estao alinhadas e somente `20261014124000_document_control_foundation.sql` e `20261015203000_document_control_integrity.sql` estao pendentes. A conexao com senha PostgreSQL funcionou; o problema observado estava na rota de criacao de login temporario do CLI. Esse resultado ainda nao significa que as migrations foram aplicadas.
+
+O comando explicito `npm.cmd run supabase:apply:documentos` prepara a aplicacao real dessas duas migrations, usando a mesma senha oculta. Ele nao aceita argumentos adicionais.
+
+- Valida os nomes e SHA256 das 31 migrations e do SQL verificador, normalizando apenas CRLF para LF. Revalida imediatamente antes do push. Nenhuma migration antiga foi editada.
+- Exige vinculo oficial, CLI/perfil/diretorio fixos e historico remoto JSON com prefixo de 29 alinhadas e somente as duas pendentes. Lista estranha, duplicada, faltante ou divergente interrompe a operacao.
+- Usa apenas `db push --linked --skip-vault --yes`; nao inclui seed, roles, include-all, reset ou repair. Invocar esse script e a acao explicita de aplicacao. O comando preflight continua somente leitura/dry-run.
+- Cada migration tem sua propria transacao. A primeira pode ser confirmada e a segunda falhar. Por isso o historico e consultado apos qualquer tentativa, inclusive exit code de erro ou falha de processo.
+- Uma execucao com 31 alinhadas nao repete o push: executa somente os checks finais. Estado parcial anterior (30 aplicada e 31 pendente) e recusado para diagnostico; nao ha reparo ou retomada automatica.
+- A consulta estrutural e um SELECT fixo de metadados. Exige exatamente uma linha com oito resultados booleanos true: historico completo de 31 versoes; tabelas/RLS/grants inclusive por coluna; seis RPCs/ACL/owners/search_path e ausencia de assinaturas antigas; helpers privados; snapshots/contratos; FK e unicidades; roles restritas; quatro permissoes documentais. Nao concede permissoes a perfis nem consulta dados de clientes.
+- `db query --linked` usa a Management API e seu login ja existente no CLI, um canal diferente da conexao com senha do PostgreSQL. Falha nesse canal apos o push nao desfaz a aplicacao. O estado distingue claramente historico confirmado de verificacao estrutural pendente.
+
+Estados de saida: `HISTORICO_31_E_ESTRUTURA_OK`, `HISTORICO_31_VERIFICACAO_PENDENTE`, `PARCIAL_30`, `HISTORICO_29` ou `INDETERMINADO`. Estados incompletos retornam falha. O exit code original de um push com erro e preservado mesmo se a leitura posterior confirmar as 31; nao ha retry automatico.
+
+O parser JSON usa a resposta bruta apenas em memoria: expurgar uma senha que coincida com um trecho de timestamp nao pode adulterar o historico usado para autorizar o push. Logs continuam expurgados e o buffer bruto nao e exposto em excecoes.
+
+A verificacao estrutural nao substitui smoke PostgREST, advisors ou habilitacao explicita dos perfis. A aplicacao real foi executada pelo usuario no computador que possui o acesso ao projeto oficial; o ambiente cloud nao recebeu senha ou credenciais administrativas.
+
+
+Gates 08, 09 e 07 do rollout: APROVADOS. A verificacao compara as colunas reais de FK/uniques/indice de vigente, nao apenas nomes, e confere parametro/default p_versao_id nas tres mutations. QA: 36 testes de tooling, 31 migrations/17 suites SQL, build/lint e 49 E2E aprovados; apos endurecer o SELECT final, o banco e tooling foram reexecutados e passaram com oito regressões de drift estrutural. O verificador foi exercitado contra o mesmo schema cumulativo local, sem conectar ao projeto remoto.
+
+Precisao do historico: a CLI omite versoes remotas invalidas/nao numericas na listagem. A guarda pre-push compara estritamente as linhas que a CLI informa; a comparacao SQL `historico_exato` no pos-check e quem verifica o ledger bruto completo, incluindo entradas nao numericas.
+
+## Resultado remoto confirmado — 16/10/2026
+
+Evidência recebida do usuário após executar `npm.cmd run supabase:apply:documentos`, disponibilizado no commit `732137c`:
+
+- Projeto oficial: `yequhfvcbwnxmqobgumu`; 29 migrations alinhadas antes da aplicação.
+- Aplicadas, nesta ordem, `20261014124000_document_control_foundation.sql` e `20261015203000_document_control_integrity.sql`.
+- Nova leitura do histórico confirmou as 31 migrations alinhadas.
+- A consulta pela Management API retornou `HISTORICO_31_E_ESTRUTURA_OK`, com os oito checks aprovados: `historico_exato`, `tabelas_fechadas`, `rpcs_finais`, `helpers_fechados`, `contratos_versionados`, `integridade_documental`, `roles_restritas` e `permissoes_documentais`.
+- Nenhuma permissão documental foi concedida a perfis pelo comando. Não é necessário repetir o push.
+
+Essa evidência confirma a aplicação e os checks de metadados no computador do usuário; não equivale a execução remota independente pelo agente. A tentativa adicional de leitura anônima via PostgREST a partir do cloud falhou na conexão, sem resposta HTTP, e não valida nem reprova a API hospedada. O cloud tem apenas a configuração pública do frontend, sem `.env.integration.local` ou credenciais de usuário para o smoke autenticado.
+
+Pendências para concluir a liberação operacional: smoke PostgREST autenticado e validação de concorrência entre conexões PostgreSQL reais; revisão dos advisors; definição da empresa, dos perfis destinatários e das permissões a conceder por backend autorizado. Esses itens não foram comprovados pelo SELECT estrutural. A integração hospedada existente testa a fundação SaaS e não cobre o workflow documental; `npm run test:integration` isoladamente não comprova o fluxo v1/v2 de Documentos.
+
+Em 16/10/2026, o usuário definiu que a liberação será feita em empresa exclusiva de teste, com todas as permissões atuais para validação. O procedimento operacional revisado está em [Empresa de teste](EMPRESA-TESTE-DOCUMENTOS.md); ele exige conta dedicada sem vínculos anteriores para manter Administração legada e Documentos no mesmo tenant. A preparação remota desse ambiente ainda depende da execução no computador autenticado.
