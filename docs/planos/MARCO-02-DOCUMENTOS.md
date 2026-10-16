@@ -54,3 +54,26 @@ Checkpoint único no Windows: `npm.cmd run validate:local`. No Linux: `npm run v
 - `supabase/tests/document_control_foundation.sql`: regressões funcionais e adversariais.
 - `tests/documentos.spec.ts`, `tests/documentos-regression.spec.ts`: seletores precisos e regressões de interface.
 - `docs/REFERENCIA_PROJETO.md`, este plano: contratos, decisões e limites de rollout.
+
+
+## Preflight remoto com senha local — 16/10/2026
+
+O usuario confirmou o checkpoint local. O Supabase CLI 2.121.0, entretanto, respondeu HTTP400 na criacao de login temporario: a API de gerenciamento recebeu ECONNREFUSED ao conectar ao PostgreSQL. Repetir o comando sem alterar a autenticacao nao resolve essa dependencia.
+
+Foi acrescentado `npm.cmd run supabase:preflight` (Linux/macOS: `npm run supabase:preflight`). Ele:
+
+- Exige o checkout vinculado ao projeto oficial antes de solicitar credenciais.
+- Reusa SUPABASE_DB_PASSWORD ja configurada ou pede a senha PostgreSQL em entrada oculta, sem PowerShell e sem valores no historico do terminal. A senha do banco e diferente da senha de login da aplicacao.
+- Usa a rota suportada pelo CLI que dispensa criar um login temporario. Mantem o fallback IPv4/pooler do CLI, sem alterar TLS, DNS, banco ou vinculo.
+- Fixa CLI 2.121.0, projeto oficial, perfil `supabase` e diretório do checkout. Executa Node+`npm-cli.js` com argumentos separados e sem shell, inclusive em caminhos Windows com espacos.
+- Executa somente `migration list --linked` e, se houver sucesso, `db push --linked --dry-run --skip-vault`. Nunca executa push real, reset ou repair. Nenhum argumento adicional e aceito.
+- Passa a senha apenas pelo ambiente do subprocesso, desativa debug herdado, nao grava credenciais e expurga valores da saida (inclusive entre chunks). Em overflow, descarta toda a saida. Para no primeiro erro e mantem seu status de falha.
+
+Os testes de tooling usam senhas ficticias e CLI substituto local, sem conectar ao Supabase. Cobrem segredo, comandos fixos, projeto, cancelamento, redacao e interrupcao por falha. A compatibilidade Windows foi simulada; ainda depende da execucao no computador do usuario.
+
+A alternativa contorna a chamada da API de login temporario; nao recupera um PostgreSQL realmente indisponivel. Se a conexao com senha tambem falhar, o banco remoto continua sendo uma dependencia externa. O dry-run mostra pendencias, mas nao aplica SQL nem verifica as precondicoes da corretiva 31. A aplicacao remota permanece pendente.
+
+Fontes do comportamento: Supabase CLI tag v2.121.0, `apps/cli/src/command-internal/db-config.layer.ts`, `config/project-ref.layer.ts` e `command-internal/db-push-core.ts` no repositorio oficial `supabase/cli`.
+
+
+Gates 07 e 09 do helper: APROVADOS. QA deste bloco: `validate:local` com exit code 0 (31 migrations, 17 suítes SQL, build, lint e 49 E2E); depois do ajuste de lifecycle da entrada, os 16 testes de tooling passaram novamente. Prompt oculto tambem foi exercitado em PTY Linux real, com senha ficticia, e encerrou com exit code 0. Sem execucao Windows real e sem acesso remoto. Nenhuma migration anterior foi modificada.
