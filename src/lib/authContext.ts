@@ -9,6 +9,7 @@ export type AuthContextValue = {
   vinculos: VinculoEmpresa[]
   empresaAtivaId: string | null
   workspaceCommercial: WorkspaceCommercial | null
+  workspaceCommercialError: string | null
   loading: boolean
   contextoError: string | null
   signIn: (email: string, password: string) => Promise<string | null>

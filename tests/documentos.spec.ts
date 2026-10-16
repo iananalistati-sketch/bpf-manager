@@ -129,7 +129,7 @@ test('documentos cria rascunho e conduz transição auditável pela interface', 
   })
 
   await page.goto('/documentos')
-  await expect(page.getByRole('heading', { name: 'Documentos' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Documentos', exact: true })).toBeVisible()
   await expect(page.getByText('Nenhum documento cadastrado')).toBeVisible()
 
   await page.getByRole('button', { name: 'Novo documento' }).click()
@@ -141,7 +141,7 @@ test('documentos cria rascunho e conduz transição auditável pela interface', 
   await page.getByRole('button', { name: 'Salvar rascunho' }).click()
 
   await expect(page.getByText('POP-001 · Higienização das instalações')).toBeVisible()
-  await expect(page.getByText('Rascunho')).toBeVisible()
+  await expect(page.getByText('Rascunho', { exact: true })).toBeVisible()
   expect(createPayload).toMatchObject({
     p_empresa_id: companyId,
     p_unidade_id: unitId,

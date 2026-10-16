@@ -70,6 +70,42 @@ try {
       `)
     }
 
+    if (path.endsWith('_document_control_integrity.sql')) {
+      const upgradeFixture = `
+        BEGIN;
+        INSERT INTO auth.users(id,email) VALUES ('dc000000-0000-0000-0000-000000000001','upgrade@example.test');
+        INSERT INTO public.empresas(id,razao_social) VALUES ('dc100000-0000-0000-0000-000000000001','Document upgrade');
+        INSERT INTO public.unidades(id,empresa_id,nome) VALUES ('dc200000-0000-0000-0000-000000000001','dc100000-0000-0000-0000-000000000001','Upgrade unit');
+        INSERT INTO public.documentos(id,empresa_id,unidade_id,codigo,titulo,tipo,created_by)
+        VALUES ('dc300000-0000-0000-0000-000000000001','dc100000-0000-0000-0000-000000000001','dc200000-0000-0000-0000-000000000001','UPGRADE','Original title','POP','dc000000-0000-0000-0000-000000000001');
+        INSERT INTO public.documento_versoes(documento_id,numero,status,descricao,autor_id)
+        VALUES ('dc300000-0000-0000-0000-000000000001',1,'rascunho','Original content','dc000000-0000-0000-0000-000000000001');
+      `
+      await db.exec(upgradeFixture)
+      await db.exec(`INSERT INTO public.documento_versoes(documento_id,numero,status,autor_id)
+        VALUES ('dc300000-0000-0000-0000-000000000001',2,'rascunho','dc000000-0000-0000-0000-000000000001')`)
+      let blocked = false
+      try { await db.exec(await read(path)) } catch (error) {
+        if (error.code !== '55000' || !error.message.includes('Reconciliar metadados historicos')) throw error
+        blocked = true
+      } finally { await db.exec('ROLLBACK') }
+      if (!blocked) throw new Error('Document upgrade accepted ambiguous multi-version history')
+      const { rows: columns } = await db.query(`SELECT column_name FROM information_schema.columns
+        WHERE table_schema='public' AND table_name='documento_versoes' AND column_name='titulo'`)
+      if (columns.length) throw new Error('Rejected document upgrade left partial DDL')
+      await db.exec(upgradeFixture)
+      try {
+        await db.exec(await read(path))
+        const { rows: snapshot } = await db.query(`SELECT titulo,tipo,unidade_id,descricao
+          FROM public.documento_versoes WHERE documento_id='dc300000-0000-0000-0000-000000000001'`)
+        if (snapshot.length !== 1 || snapshot[0].titulo !== 'Original title' || snapshot[0].tipo !== 'POP'
+          || snapshot[0].unidade_id !== 'dc200000-0000-0000-0000-000000000001' || snapshot[0].descricao !== 'Original content') {
+          throw new Error('Document upgrade did not preserve existing v1 metadata')
+        }
+      } finally { await db.exec('ROLLBACK') }
+      console.log('PASS: document upgrade preserves v1 and rejects ambiguous multi-version history atomically')
+    }
+
     await db.exec(`BEGIN;\n${await read(path)}\nCOMMIT;`)
     console.log(`PASS: applied ${path.split('/').at(-1)}`)
 

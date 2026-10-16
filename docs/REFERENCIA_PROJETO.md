@@ -368,7 +368,7 @@ Antes de desenvolver uma nova funcionalidade, validar:
 
 - **Marco 1 — Administração segura:** concluído e implantado.
 - **Marco 1.5 — Fundação SaaS:** base arquitetural concluída; integração de pagamento real permanece adiada e desacoplada.
-- **Marco 2 — Documentos + Agenda BPF:** em andamento; primeira entrega implementa documentos controlados tenant-aware com versionamento, workflow, auditoria e bloqueio comercial de escrita.
+- **Marco 2 — Documentos + Agenda BPF:** em andamento; primeira entrega implementa documentos controlados tenant-aware com versionamento, workflow, auditoria e bloqueio comercial de escrita. A revisão consolidada preserva metadados por versão, coexistência de vigente e rascunho e auditoria da substituição; ver `docs/planos/MARCO-02-DOCUMENTOS.md`.
 - **Marco 3 — Operação básica:** fornecedores, recebimentos, higienização, treinamentos, água, equipamentos, pragas e resíduos.
 - **Marco 4 — Qualidade:** NC/CAPA e auditorias.
 - **Marco 5 — Produção, rastreabilidade e recall.**
@@ -401,4 +401,4 @@ Se uma implementação entrar em conflito com esta referência, a divergência d
 **Projeto:** BPF Manager  
 **Documento:** Referência geral do projeto  
 **Status:** Ativo  
-**Última atualização:** 14/10/2026
+**Última atualização:** 15/10/2026
