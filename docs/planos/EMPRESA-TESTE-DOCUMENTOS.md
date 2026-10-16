@@ -24,7 +24,7 @@ npm.cmd run supabase:prepare:qa
 
 Use o e-mail real da conta de teste no lugar do exemplo. A senha PostgreSQL é solicitada em entrada oculta ou reutilizada de uma vinculação segura de `SUPABASE_DB_PASSWORD`. O SQL é executado pela Management API com o login administrativo existente. Na CLI 2.121.0, `db query --linked` também resolve a conexão antes da chamada HTTP; a senha evita reintroduzir o erro de criação do login temporário.
 
-O comando confere as 31 migrations locais pelos hashes aprovados, o vínculo/projeto/perfil/CLI fixos e os oito checks estruturais remotos antes de preparar dados. Não aceita argumentos adicionais. Os dois SQLs operacionais têm manifesto próprio com hashes; só CRLF é normalizado. O e-mail é validado e convertido em UTF8/hex para substituição, enviado por stdin, sem arquivo temporário nem SQL nos argumentos do processo. A senha permanece no ambiente do subprocesso com expurgo de saída e debug desativado.
+O comando confere as 31 migrations locais pelos hashes aprovados, o vínculo/projeto/perfil/CLI fixos e os oito checks estruturais remotos antes de preparar dados. Não aceita argumentos adicionais. Os SQLs operacionais têm manifesto próprio com hashes; só CRLF é normalizado. O e-mail é validado e convertido em UTF8/hex para substituição, enviado por stdin, sem arquivo temporário nem SQL nos argumentos do processo. A senha permanece no ambiente do subprocesso com expurgo de saída e debug desativado.
 
 ## Transação e reexecução
 
@@ -57,3 +57,26 @@ QA local: 31 migrations e 17 suítes SQL existentes, mais harness operacional de
 `validate:local` passou com build, lint e 49 E2E. Depois da correção da autenticação do helper, os testes de tooling foram reexecutados: 50 aprovados, sem skipped. O teste de stdin usa subprocesso Node real; os testes de CLI usam substitutos locais. Nenhuma empresa TESTE foi criada remotamente pelo agente: a execução no computador autenticado permanece pendente.
 
 Gates 08, 09, 07 e 10: **APROVADOS**. O bloqueador de autenticação do preflight da CLI foi corrigido com a sessão de senha oculta já revisada; a mensagem após resposta de escrita perdida usa confirmação pendente, sem inferir rollback.
+
+## Diagnóstico de QA_BLOQUEADO — 16/10/2026
+
+O usuário reportou `QA_BLOQUEADO` antes de qualquer escrita. A saída original agregava várias condições em `conta_valida`/`conta_livre`, sem identificar o impedimento. Esse resultado não permite concluir que a conta tem empresa, não está confirmada ou sequer existe no Auth.
+
+Foi acrescentado o comando estritamente de leitura:
+
+```powershell
+$env:BPF_QA_EMAIL = 'conta-exclusiva@example.com'
+npm.cmd run supabase:diagnose:qa
+```
+
+Ele reutiliza projeto/CLI/perfil fixos e a senha oculta necessária ao preflight da CLI. Executa somente o novo SELECT hasheado `scripts/sql/diagnose-qa-account.sql`, sem chamar o provisionamento ou modificar confirmação, senhas, status, vínculos e permissões. Auth e cadastro da aplicação são contados separadamente, distinguindo também email ambíguo, banimento/exclusão, email do cadastro divergente e vínculos anteriores inclusive inativos. Marcador QA de outra identidade é informado apenas por booleano, sem expor seus dados.
+
+A resposta tem exatamente 13 contagens e três booleanos; o formatter só imprime códigos `CAUSA_QA` conhecidos. Nenhum email, UUID, payload Auth ou metadado é retornado pelo SELECT. stdout/stderr brutos e exceções do CLI são suprimidos nesse diagnóstico, inclusive em falhas e JSON inválido. `DIAGNOSTICO_QA_CONCLUIDO` e exit code 0 confirmam apenas que a leitura foi concluída e interpretada, não que um ambiente foi criado ou esteja pronto.
+
+O caminho `supabase:prepare:qa` agora chama esse mesmo diagnóstico automaticamente ao bloquear, reutilizando a sessão sem pedir senha novamente. Falha diagnóstica mantém `QA_BLOQUEADO`, exit code 1 e ausência de escrita. Para marcador da própria conta, também mostra os nomes dos checks de inspeção pendentes; não recomenda recriar nem reparar o ambiente automaticamente.
+
+Um vínculo prévio exige uma conta de teste exclusiva, não a remoção ou transferência da conta existente. Outros impedimentos devem ser tratados conforme a causa efetivamente observada. O email informado pelo usuário permanece somente na conversa e na variável local, sem novo padrão embutido no repositório.
+
+QA desta correção: 54 testes de tooling e 31 migrations/17 suítes SQL, incluindo os cenários QA e o diagnóstico contra contas ausentes/ambíguas/não confirmadas/banidas/excluídas/inativas, cadastro ausente e vínculos prévios. Marcador de outra conta ou com UUID inválido é diagnosticado sem casts de UUID. Nenhuma migration ou SQL de provisionamento/inspeção anterior foi alterado. Causa remota e criação da empresa TESTE continuam pendentes de evidência do computador autenticado.
+
+Gates 08, 09 e 07 do diagnóstico: **APROVADOS**, sem bloqueadores conhecidos.

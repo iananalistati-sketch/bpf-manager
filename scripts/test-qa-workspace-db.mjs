@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { qaSql, classifyQa } from './supabase-prepare-qa.mjs'
+import { qaSql, classifyQa, explainQaDiagnosis } from './supabase-prepare-qa.mjs'
 import { repositoryRoot } from './supabase-preflight.mjs'
 
 export async function testQaWorkspace(db) {
@@ -9,6 +9,7 @@ export async function testQaWorkspace(db) {
   const realCompany = 'aa100000-0000-0000-0000-000000000001'
   const sql = await qaSql(repositoryRoot,'scripts/sql/provision-qa-workspace.sql',email)
   const inspect = async targetEmail => classifyQa((await db.query(await qaSql(repositoryRoot,'scripts/sql/inspect-qa-workspace.sql',targetEmail ?? email))).rows)
+  const diagnose = async targetEmail => explainQaDiagnosis((await db.query(await qaSql(repositoryRoot,'scripts/sql/diagnose-qa-account.sql',targetEmail ?? email))).rows)
   const realSnapshot = async () => (await db.query(`select jsonb_build_object(
     'usuario',(select to_jsonb(u) from public.usuarios u where id='${realUser}'),
     'empresa',(select to_jsonb(e) from public.empresas e where id='${realCompany}'),
@@ -44,6 +45,27 @@ export async function testQaWorkspace(db) {
         VALUES ('${realUser}','aa200000-0000-0000-0000-000000000001');`)
     const preserved = await realSnapshot()
     assert.equal((await inspect()).kind,'eligible')
+    assert.deepEqual(await diagnose(),{reasons:[],existing:false})
+    assert.ok((await diagnose('missing@example.test')).reasons.includes('CONTA_AUTH_NAO_ENCONTRADA'))
+    for(const [mutation,reason] of [
+      [`DELETE FROM public.usuarios WHERE id='${user}'`,'CADASTRO_DA_APLICACAO_AUSENTE'],
+      [`INSERT INTO auth.users(id,email,email_confirmed_at) VALUES ('aa000000-0000-0000-0000-000000000004','${email}',now())`,'EMAIL_AMBIGUO_NO_AUTH'],
+      [`UPDATE auth.users SET email_confirmed_at=null WHERE id='${user}'`,'EMAIL_NAO_CONFIRMADO'],
+      [`UPDATE auth.users SET banned_until=now()+interval '1 day' WHERE id='${user}'`,'CONTA_AUTH_BANIDA'],
+      [`UPDATE auth.users SET deleted_at=now() WHERE id='${user}'`,'CONTA_AUTH_EXCLUIDA'],
+      [`UPDATE public.usuarios SET ativo=false WHERE id='${user}'`,'CADASTRO_INATIVO_OU_BLOQUEADO'],
+      [`UPDATE public.usuarios SET email='different@example.test' WHERE id='${user}'`,'EMAIL_DO_CADASTRO_DIVERGENTE'],
+      [`INSERT INTO public.usuario_empresas(usuario_id,empresa_id,status) VALUES ('${user}','${realCompany}','inativo')`,'VINCULOS_EMPRESARIAIS_EXISTENTES'],
+      [`INSERT INTO public.usuario_perfis(usuario_id,perfil_id) VALUES ('${user}','aa200000-0000-0000-0000-000000000001')`,'PERFIS_LEGADOS_EXISTENTES'],
+      [`INSERT INTO public.saas_provisionamentos(chave_idempotencia,tipo,usuario_id,status) VALUES ('diagnostic-prior-trial','trial','${user}','falhou')`,'PROVISIONAMENTO_ANTERIOR'],
+      [`UPDATE public.usuarios SET empresa_id='${realCompany}' WHERE id='${user}'`,'EMPRESA_PRINCIPAL_EXISTENTE'],
+      [`INSERT INTO public.empresas(razao_social,created_by) VALUES ('Old test company','${user}')`,'EMPRESAS_CRIADAS_PELA_CONTA'],
+    ]) {
+      await db.exec(`SAVEPOINT qa_diagnostic; ${mutation}`)
+      try { assert.ok((await diagnose()).reasons.includes(reason),reason) }
+      finally { await db.exec('ROLLBACK TO SAVEPOINT qa_diagnostic; RELEASE SAVEPOINT qa_diagnostic') }
+    }
+    console.log('PASS: read-only QA diagnosis distinguishes missing Auth/app, ambiguous email, account lifecycle and all prior links without mutation')
     await expectFailure(`UPDATE public.usuarios SET status='bloqueado' WHERE id='${user}'`,sql,'42501')
     await expectFailure(`UPDATE auth.users SET email_confirmed_at=null WHERE id='${user}'`,sql,'42501')
     await expectFailure(`UPDATE auth.users SET banned_until=now()+interval '1 day' WHERE id='${user}'`,sql,'42501')
@@ -60,6 +82,13 @@ export async function testQaWorkspace(db) {
     await db.exec(sql)
     const ready = await inspect()
     assert.equal(ready.kind,'ready')
+    assert.deepEqual(await diagnose(),{reasons:[],existing:true})
+    assert.ok((await diagnose('other-bootstrap@example.test')).reasons.includes('MARCADOR_QA_DE_OUTRA_CONTA'))
+    await db.exec(`SAVEPOINT qa_bad_marker; UPDATE public.saas_provisionamentos
+      SET contexto=contexto || '{"qa_perfil_id":"invalid-uuid","qa_marker":"unexpected"}'::jsonb
+      WHERE chave_idempotencia='bpf:qa-documentos:v1'`)
+    try { assert.ok((await diagnose()).reasons.includes('MARCADOR_QA_INCOMPLETO_OU_DIVERGENTE')) }
+    finally { await db.exec('ROLLBACK TO SAVEPOINT qa_bad_marker; RELEASE SAVEPOINT qa_bad_marker') }
     assert.deepEqual(await realSnapshot(),preserved)
     const snapshotSql = `select jsonb_build_object(
       'ledger',(select to_jsonb(s) from public.saas_provisionamentos s where chave_idempotencia='bpf:qa-documentos:v1'),

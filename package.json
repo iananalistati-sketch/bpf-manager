@@ -14,6 +14,7 @@
     "test:tooling": "node --test scripts/*.test.mjs",
     "supabase:apply:documentos": "node scripts/supabase-apply-documentos.mjs",
     "supabase:prepare:qa": "node scripts/supabase-prepare-qa.mjs",
+    "supabase:diagnose:qa": "node scripts/supabase-diagnose-qa.mjs",
     "supabase:preflight": "node scripts/supabase-preflight.mjs",
     "test:integration": "node scripts/test-supabase-integration.mjs",
     "validate:local": "npm run test:tooling && npm run test:db && npm run build && npm run lint && npm run test:e2e",

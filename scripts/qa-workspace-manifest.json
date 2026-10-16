@@ -1,4 +1,5 @@
 {
   "scripts/sql/provision-qa-workspace.sql": "57337f024ceaab679acf5c31fe7e6e433c93886079497b73f2138cace665cf2a",
-  "scripts/sql/inspect-qa-workspace.sql": "3fa746241036c14cb85b900ace7d81d08d899bc1454d57d3d2678cb461b1ddb2"
+  "scripts/sql/inspect-qa-workspace.sql": "3fa746241036c14cb85b900ace7d81d08d899bc1454d57d3d2678cb461b1ddb2",
+  "scripts/sql/diagnose-qa-account.sql": "6f936ea2b4a3e32755b21549e0e4c208ea03a5aa1384a24e550e6be0ca231cd4"
 }

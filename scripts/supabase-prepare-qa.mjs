@@ -9,6 +9,8 @@ import { validatePayload, verifyMetadata } from './supabase-apply-documentos.mjs
 const checkNames = ['conta_valida','marcador_ausente','conta_livre','identidade_isolada','perfil_local_completo','trial_preservado','onboarding_disponivel','provisionamento_auditado']
 const readyChecks = checkNames.filter(name => !['marcador_ausente','conta_livre'].includes(name))
 const resultNames = ['checks','empresa_id','unidade_id','perfil_id','trial_fim','quantidade_permissoes']
+const diagnosisCounts = ['auth_encontrados','cadastros_encontrados','auth_confirmados','auth_banidos','auth_excluidos','cadastros_habilitados','emails_coincidentes','empresas_principais','unidades_principais','memberships','perfis_legados','provisionamentos','empresas_criadas']
+const diagnosisFlags = ['marcador_existe','marcador_desta_conta','marcador_valido']
 const sameKeys = (value, keys) => value && typeof value === 'object' && !Array.isArray(value)
   && JSON.stringify(Object.keys(value).sort()) === JSON.stringify([...keys].sort())
 
@@ -53,6 +55,65 @@ export function classifyQa(rows) {
   return { kind: 'blocked', row }
 }
 
+export function explainQaDiagnosis(rows) {
+  const row=Array.isArray(rows)&&rows.length===1?rows[0]:null
+  if(!sameKeys(row,[...diagnosisCounts,...diagnosisFlags])
+      || diagnosisCounts.some(key=>!Number.isSafeInteger(row[key])||row[key]<0)
+      || diagnosisFlags.some(key=>typeof row[key]!=='boolean')) {
+    throw new Error('Resposta de diagnostico QA invalida; nenhum dado remoto sera exibido.')
+  }
+  const reasons=[]
+  if(row.auth_encontrados===0) reasons.push('CONTA_AUTH_NAO_ENCONTRADA')
+  if(row.auth_encontrados>1) reasons.push('EMAIL_AMBIGUO_NO_AUTH')
+  if(row.auth_encontrados===1) {
+    if(row.cadastros_encontrados!==1) reasons.push('CADASTRO_DA_APLICACAO_AUSENTE')
+    if(row.auth_confirmados!==1) reasons.push('EMAIL_NAO_CONFIRMADO')
+    if(row.auth_banidos>0) reasons.push('CONTA_AUTH_BANIDA')
+    if(row.auth_excluidos>0) reasons.push('CONTA_AUTH_EXCLUIDA')
+    if(row.cadastros_encontrados===1) {
+      if(row.cadastros_habilitados!==1) reasons.push('CADASTRO_INATIVO_OU_BLOQUEADO')
+      if(row.emails_coincidentes!==1) reasons.push('EMAIL_DO_CADASTRO_DIVERGENTE')
+    }
+  }
+  if(row.marcador_existe&&!row.marcador_desta_conta) reasons.push('MARCADOR_QA_DE_OUTRA_CONTA')
+  if(row.marcador_desta_conta&&!row.marcador_valido) reasons.push('MARCADOR_QA_INCOMPLETO_OU_DIVERGENTE')
+  if(!row.marcador_existe) {
+    for(const [key,reason] of Object.entries({empresas_principais:'EMPRESA_PRINCIPAL_EXISTENTE',unidades_principais:'UNIDADE_PRINCIPAL_EXISTENTE',memberships:'VINCULOS_EMPRESARIAIS_EXISTENTES',perfis_legados:'PERFIS_LEGADOS_EXISTENTES',provisionamentos:'PROVISIONAMENTO_ANTERIOR',empresas_criadas:'EMPRESAS_CRIADAS_PELA_CONTA'})) {
+      if(row[key]>0) reasons.push(reason)
+    }
+  }
+  return { reasons, existing:row.marcador_desta_conta }
+}
+
+async function reportQaDiagnosis({root,env,email,run,context,output}) {
+  const sql=await qaSql(root,'scripts/sql/diagnose-qa-account.sql',email)
+  // Never echo raw CLI/error payloads; only the validated fixed reason codes below.
+  const sink={write:()=>{}}
+  let result
+  try {
+    result=await run(buildCliArgs(root,env,['db','query','--output','json','--agent','no']),
+      {...context,input:sql,parseOutput:JSON.parse,quiet:true,output:sink,errorOutput:sink})
+  } catch { throw new Error('Diagnostico remoto indisponivel; nenhuma alteracao foi executada pelo diagnostico.') }
+  if(result.code!==0) throw new Error('Diagnostico remoto indisponivel; nenhuma alteracao foi executada pelo diagnostico.')
+  const diagnosis=explainQaDiagnosis(result.data)
+  for(const reason of diagnosis.reasons) output.write(`CAUSA_QA: ${reason}\n`)
+  if(!diagnosis.reasons.length) output.write(diagnosis.existing
+    ? 'CAUSA_QA: AMBIENTE_QA_EXISTENTE_REQUER_CONFERENCIA. O diagnostico da conta nao comprova perfil/trial/estrutura.\n'
+    : 'CAUSA_QA: CONTA_ELEGIVEL. O diagnostico nao criou ambiente nem validou o provisionamento.\n')
+  output.write('DIAGNOSTICO_QA_CONCLUIDO. Somente leitura; contas, confirmacao, vinculos e permissoes preservados.\n')
+}
+
+export async function diagnoseQa({root=repositoryRoot,env=process.env,run=runCommand,output=process.stdout,prompt}={}) {
+  const email=validateEmail(env.BPF_QA_EMAIL)
+  await validatePayload(root)
+  await qaSql(root,'scripts/sql/diagnose-qa-account.sql',email)
+  return withDatabasePassword({root,env,prompt,output,action:async context=>{
+    output.write(`Diagnostico QA somente leitura no projeto ${officialProjectRef}.\n`)
+    await reportQaDiagnosis({root,env,email,run,context,output})
+    return 0
+  }})
+}
+
 export async function prepareQa({ root = repositoryRoot, env = process.env, run = runCommand, output = process.stdout, prompt } = {}) {
   const email = validateEmail(env.BPF_QA_EMAIL)
   await validatePayload(root)
@@ -74,7 +135,12 @@ export async function prepareQa({ root = repositoryRoot, env = process.env, run 
     verifyMetadata(metadata.data)
     const before = await inspect()
     if (before.kind === 'blocked') {
-      output.write('ESTADO: QA_BLOQUEADO. Confira se a conta esta confirmada, habilitada e sem empresa/vinculos. Se o ambiente ja existe, houve divergencia; nao sera reparado automaticamente.\n')
+      output.write('ESTADO: QA_BLOQUEADO. Nenhuma escrita foi iniciada nesta chamada; diagnosticando as precondicoes sem alterar a conta.\n')
+      try { await reportQaDiagnosis({root,env,email,run,context,output}) }
+      catch { output.write('DIAGNOSTICO_QA_INDISPONIVEL. Bloqueio mantido; nenhuma escrita ou tentativa automatica.\n') }
+      if(!before.row.checks.marcador_ausente) {
+        output.write(`Checks QA pendentes: ${readyChecks.filter(name=>!before.row.checks[name]).join(', ')}.\n`)
+      }
       return 1
     }
     let status = 0

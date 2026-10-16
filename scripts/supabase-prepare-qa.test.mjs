@@ -5,12 +5,16 @@ import { join } from 'node:path'
 import { test } from 'node:test'
 import qaManifest from './qa-workspace-manifest.json' with { type: 'json' }
 import { checkNames as metadataChecks } from './supabase-apply-documentos.mjs'
-import { classifyQa, prepareQa, qaSql, validateEmail } from './supabase-prepare-qa.mjs'
+import { classifyQa, diagnoseQa, explainQaDiagnosis, prepareQa, qaSql, validateEmail } from './supabase-prepare-qa.mjs'
 import { officialProjectRef, repositoryRoot, runCommand } from './supabase-preflight.mjs'
 
 const env = { npm_execpath:'/tmp/npm-cli.js', BPF_QA_EMAIL:'qa@example.test', SUPABASE_DB_PASSWORD:'db-secret-not-needed', SUPABASE_DEBUG:'true' }
 const logger = () => { let text=''; return { write:value=>{text+=value}, value:()=>text } }
 const metadata = () => [Object.fromEntries(metadataChecks.map(name=>[name,true]))]
+const diagnosis = overrides => [{auth_encontrados:1,cadastros_encontrados:1,auth_confirmados:1,auth_banidos:0,
+  auth_excluidos:0,cadastros_habilitados:1,emails_coincidentes:1,empresas_principais:0,unidades_principais:0,
+  memberships:0,perfis_legados:0,provisionamentos:0,empresas_criadas:0,
+  marcador_existe:false,marcador_desta_conta:false,marcador_valido:false,...overrides}]
 const sample = ready => [{
   checks:{conta_valida:true,marcador_ausente:!ready,conta_livre:!ready,identidade_isolada:ready,
     perfil_local_completo:ready,trial_preservado:ready,onboarding_disponivel:ready,provisionamento_auditado:ready},
@@ -30,7 +34,7 @@ async function checkout(t) {
   for (const file of [...Object.keys(qaManifest),'scripts/sql/verify-documentos-deploy.sql']) await cp(join(repositoryRoot,file),join(root,file))
   return root
 }
-function runner({before=sample(false),after=sample(true),mutationCode=0,mutationThrows=false,afterFails=false,badMetadata=false,onInspect}={}) {
+function runner({before=sample(false),after=sample(true),mutationCode=0,mutationThrows=false,afterFails=false,badMetadata=false,onInspect,diagnosticData=diagnosis(),diagnosticCode=0}={}) {
   const calls=[]
   let inspected=0
   return {calls,run:async (args,context)=>{
@@ -47,6 +51,7 @@ function runner({before=sample(false),after=sample(true),mutationCode=0,mutation
     assert.ok(!args.join(' ').includes('do $qa$'))
     if(args.includes('--file')) return {code:badMetadata?1:0,data:metadata()}
     assert.ok(context.input.includes(Buffer.from(env.BPF_QA_EMAIL).toString('hex')))
+    if(context.input.includes('with alvo as')) return {code:diagnosticCode,data:diagnosticData}
     if(context.input.includes('do $qa$')) {
       if(mutationThrows) throw new Error('lost process')
       return mutationCode
@@ -76,8 +81,10 @@ test('QA bound/blocked account stops before mutation',async t=>{
   before[0].checks.conta_livre=false
   const mock=runner({before}),output=logger()
   assert.equal(await prepareQa({root,env,run:mock.run,output}),1)
-  assert.equal(mock.calls.length,2)
+  assert.equal(mock.calls.length,3)
   assert.ok(output.value().includes('QA_BLOQUEADO'))
+  assert.ok(output.value().includes('DIAGNOSTICO_QA_CONCLUIDO'))
+  assert.ok(!mock.calls.some(c=>c.context.input?.includes('do $qa$')))
 })
 for(const options of [{mutationCode:7},{mutationThrows:true}]) {
   test(`QA inspects after mutation failure and preserves failure ${JSON.stringify(options)}`,async t=>{
@@ -144,4 +151,66 @@ test('QA missing password uses reviewed hidden prompt once; empty or cancelled i
   for(const prompt of [async()=>'',async()=>{throw Object.assign(new Error('cancelled'),{exitCode:130})}]) {
     await assert.rejects(prepareQa({root,env:{...env,SUPABASE_DB_PASSWORD:undefined},prompt,run:()=>assert.fail('no CLI'),output:logger()}))
   }
+})
+
+test('QA standalone diagnosis runs only the fixed SELECT with a single password prompt',async t=>{
+  const root=await checkout(t),mock=runner({diagnosticData:diagnosis({empresas_principais:1,memberships:2})}),output=logger()
+  let prompted=0
+  assert.equal(await diagnoseQa({root,env:{...env,SUPABASE_DB_PASSWORD:undefined},prompt:async()=>{prompted++;return env.SUPABASE_DB_PASSWORD},run:mock.run,output}),0)
+  assert.equal(prompted,1)
+  assert.equal(mock.calls.length,1)
+  assert.ok(mock.calls[0].context.input.includes('with alvo as'))
+  assert.ok(output.value().includes('EMPRESA_PRINCIPAL_EXISTENTE'))
+  assert.ok(output.value().includes('VINCULOS_EMPRESARIAIS_EXISTENTES'))
+  assert.ok(!output.value().includes(env.BPF_QA_EMAIL))
+})
+test('QA diagnosis distinguishes missing Auth/app, ambiguity, confirmation and every guard',()=>{
+  for(const [overrides,reason] of [
+    [{auth_encontrados:0},'CONTA_AUTH_NAO_ENCONTRADA'],
+    [{auth_encontrados:2},'EMAIL_AMBIGUO_NO_AUTH'],
+    [{cadastros_encontrados:0},'CADASTRO_DA_APLICACAO_AUSENTE'],
+    [{auth_confirmados:0},'EMAIL_NAO_CONFIRMADO'],
+    [{auth_banidos:1},'CONTA_AUTH_BANIDA'],
+    [{auth_excluidos:1},'CONTA_AUTH_EXCLUIDA'],
+    [{cadastros_habilitados:0},'CADASTRO_INATIVO_OU_BLOQUEADO'],
+    [{emails_coincidentes:0},'EMAIL_DO_CADASTRO_DIVERGENTE'],
+    [{empresas_principais:1},'EMPRESA_PRINCIPAL_EXISTENTE'],
+    [{unidades_principais:1},'UNIDADE_PRINCIPAL_EXISTENTE'],
+    [{memberships:1},'VINCULOS_EMPRESARIAIS_EXISTENTES'],
+    [{perfis_legados:1},'PERFIS_LEGADOS_EXISTENTES'],
+    [{provisionamentos:1},'PROVISIONAMENTO_ANTERIOR'],
+    [{empresas_criadas:1},'EMPRESAS_CRIADAS_PELA_CONTA'],
+    [{marcador_existe:true},'MARCADOR_QA_DE_OUTRA_CONTA'],
+    [{marcador_existe:true,marcador_desta_conta:true},'MARCADOR_QA_INCOMPLETO_OU_DIVERGENTE'],
+  ]) assert.ok(explainQaDiagnosis(diagnosis(overrides)).reasons.includes(reason))
+  assert.deepEqual(explainQaDiagnosis(diagnosis()),{reasons:[],existing:false})
+  assert.deepEqual(explainQaDiagnosis(diagnosis({marcador_existe:true,marcador_desta_conta:true,marcador_valido:true,empresas_principais:1})),{reasons:[],existing:true})
+})
+test('QA diagnosis rejects unexpected payload without echoing PII or raw errors',async t=>{
+  const root=await checkout(t),output=logger()
+  const secret='fake-token-or-sensitive-payload'
+  for(const data of [[],[{}],diagnosis({auth_encontrados:'1'}),diagnosis({email:env.BPF_QA_EMAIL,token:secret})]) {
+    await assert.rejects(diagnoseQa({root,env,output,run:async(args,context)=>{
+      context.output.write(secret);context.errorOutput.write(env.BPF_QA_EMAIL)
+      return {code:0,data}
+    }}),/diagnostico QA invalida/)
+  }
+  await assert.rejects(diagnoseQa({root,env,output,run:async(args,context)=>{
+    context.output.write(secret);context.errorOutput.write(env.BPF_QA_EMAIL)
+    return {code:8,data:null}
+  }}),/indisponivel/)
+  await assert.rejects(diagnoseQa({root,env,output,run:async()=>{throw new Error(secret+' '+env.BPF_QA_EMAIL)}}),/indisponivel/)
+  assert.ok(!output.value().includes(secret))
+  assert.ok(!output.value().includes(env.BPF_QA_EMAIL))
+})
+test('QA failed automatic diagnosis preserves blocking with no mutation or second password',async t=>{
+  const root=await checkout(t),before=sample(false)
+  before[0].checks.conta_livre=false
+  const mock=runner({before,diagnosticCode:9}),output=logger()
+  let prompts=0
+  assert.equal(await prepareQa({root,env:{...env,SUPABASE_DB_PASSWORD:undefined},prompt:async()=>{prompts++;return env.SUPABASE_DB_PASSWORD},run:mock.run,output}),1)
+  assert.equal(prompts,1)
+  assert.equal(mock.calls.length,3)
+  assert.ok(output.value().includes('DIAGNOSTICO_QA_INDISPONIVEL'))
+  assert.ok(!mock.calls.some(c=>c.context.input?.includes('do $qa$')))
 })
