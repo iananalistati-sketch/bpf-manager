@@ -1,6 +1,6 @@
 # Marco 2 — Revisão consolidada de Documentos
 
-Revisão local sobre `feature/supabase-auth`, base `4b3228774d6c4b60ba2a12b6049f758906557a54`. Nenhuma aplicação remota foi executada neste ciclo.
+Revisão sobre `feature/supabase-auth`, base `4b3228774d6c4b60ba2a12b6049f758906557a54`. Em 16/10/2026, o usuário confirmou a aplicação das duas migrations de Documentos no projeto oficial e a aprovação dos oito checks estruturais. Smoke PostgREST autenticado, advisors e liberação dos perfis permanecem pendentes; ver o registro remoto ao final.
 
 ## Contrato consolidado
 
@@ -35,7 +35,7 @@ QA local em 15/10/2026: `npm run validate:local` terminou com exit code 0: prefl
 
 ## Limites e rollout
 
-- **Não fazer deploy antes do checkpoint local verde.** Confirmar no Supabase oficial quais migrations estão pendentes; não presumir que somente a migration 30 esteja pendente agora, pois este ciclo acrescenta a 31. Quando autorizado, usar Supabase CLI preservando timestamps e verificar o estado remoto depois.
+- **Não fazer deploy antes do checkpoint local verde.** O checkpoint, o preflight e a aplicação das migrations 30 e 31 foram confirmados pelo usuário em 16/10/2026. As 31 migrations agora aplicadas são imutáveis; novas correções exigem migration adicional. Qualquer implantação futura deve conferir as pendências reais, preservar timestamps e verificar o estado remoto depois.
 - **Nenhuma concessão automática de `documentos.*`.** Antes de habilitar o módulo remotamente, revisar os perfis destinatários e atribuir as permissões por backend autorizado. O teto de delegação impede que um administrador sem essas permissões as conceda a si mesmo. Não usar bypass no frontend nem atribuir a todos os perfis.
 - As RPCs documentais mantêm o owner privilegiado usado pela camada comercial anterior: `SECURITY DEFINER`, `search_path=''`, ACL restrita e tabelas sem acesso direto para `anon`, `authenticated` ou `service_role`. RLS está habilitada, mas o owner do deployer não depende dela; a autorização explícita das RPCs continua sendo a barreira efetiva. Uma role documental restrita é evolução de defesa em profundidade, não foi introduzida nesta revisão.
 - A consulta administrativa de auditoria segue o tenant primário legado. O histórico documental tenant-aware permanece disponível para memberships secundários; a modernização da auditoria administrativa é escopo separado.
@@ -71,7 +71,7 @@ Foi acrescentado `npm.cmd run supabase:preflight` (Linux/macOS: `npm run supabas
 
 Os testes de tooling usam senhas ficticias e CLI substituto local, sem conectar ao Supabase. Cobrem segredo, comandos fixos, projeto, cancelamento, redacao e interrupcao por falha. A compatibilidade Windows foi simulada; ainda depende da execucao no computador do usuario.
 
-A alternativa contorna a chamada da API de login temporario; nao recupera um PostgreSQL realmente indisponivel. Se a conexao com senha tambem falhar, o banco remoto continua sendo uma dependencia externa. O dry-run mostra pendencias, mas nao aplica SQL nem verifica as precondicoes da corretiva 31. A aplicacao remota permanece pendente.
+A alternativa contorna a chamada da API de login temporario; nao recupera um PostgreSQL realmente indisponivel. Se a conexao com senha tambem falhar, o banco remoto continua sendo uma dependencia externa. O dry-run mostra pendencias, mas nao aplica SQL nem verifica as precondicoes da corretiva 31. Na etapa de preflight, a aplicacao remota ainda estava pendente; o resultado posterior esta registrado ao final.
 
 Fontes do comportamento: Supabase CLI tag v2.121.0, `apps/cli/src/command-internal/db-config.layer.ts`, `config/project-ref.layer.ts` e `command-internal/db-push-core.ts` no repositorio oficial `supabase/cli`.
 
@@ -97,9 +97,23 @@ Estados de saida: `HISTORICO_31_E_ESTRUTURA_OK`, `HISTORICO_31_VERIFICACAO_PENDE
 
 O parser JSON usa a resposta bruta apenas em memoria: expurgar uma senha que coincida com um trecho de timestamp nao pode adulterar o historico usado para autorizar o push. Logs continuam expurgados e o buffer bruto nao e exposto em excecoes.
 
-A verificacao estrutural nao substitui smoke PostgREST, advisors ou habilitacao explicita dos perfis. A aplicacao real continua dependendo da execucao do comando pelo usuario no computador que possui o acesso ao projeto oficial; o ambiente cloud nao recebeu senha ou credenciais administrativas.
+A verificacao estrutural nao substitui smoke PostgREST, advisors ou habilitacao explicita dos perfis. A aplicacao real foi executada pelo usuario no computador que possui o acesso ao projeto oficial; o ambiente cloud nao recebeu senha ou credenciais administrativas.
 
 
 Gates 08, 09 e 07 do rollout: APROVADOS. A verificacao compara as colunas reais de FK/uniques/indice de vigente, nao apenas nomes, e confere parametro/default p_versao_id nas tres mutations. QA: 36 testes de tooling, 31 migrations/17 suites SQL, build/lint e 49 E2E aprovados; apos endurecer o SELECT final, o banco e tooling foram reexecutados e passaram com oito regressões de drift estrutural. O verificador foi exercitado contra o mesmo schema cumulativo local, sem conectar ao projeto remoto.
 
 Precisao do historico: a CLI omite versoes remotas invalidas/nao numericas na listagem. A guarda pre-push compara estritamente as linhas que a CLI informa; a comparacao SQL `historico_exato` no pos-check e quem verifica o ledger bruto completo, incluindo entradas nao numericas.
+
+## Resultado remoto confirmado — 16/10/2026
+
+Evidência recebida do usuário após executar `npm.cmd run supabase:apply:documentos`, disponibilizado no commit `732137c`:
+
+- Projeto oficial: `yequhfvcbwnxmqobgumu`; 29 migrations alinhadas antes da aplicação.
+- Aplicadas, nesta ordem, `20261014124000_document_control_foundation.sql` e `20261015203000_document_control_integrity.sql`.
+- Nova leitura do histórico confirmou as 31 migrations alinhadas.
+- A consulta pela Management API retornou `HISTORICO_31_E_ESTRUTURA_OK`, com os oito checks aprovados: `historico_exato`, `tabelas_fechadas`, `rpcs_finais`, `helpers_fechados`, `contratos_versionados`, `integridade_documental`, `roles_restritas` e `permissoes_documentais`.
+- Nenhuma permissão documental foi concedida a perfis pelo comando. Não é necessário repetir o push.
+
+Essa evidência confirma a aplicação e os checks de metadados no computador do usuário; não equivale a execução remota independente pelo agente. A tentativa adicional de leitura anônima via PostgREST a partir do cloud falhou na conexão, sem resposta HTTP, e não valida nem reprova a API hospedada. O cloud tem apenas a configuração pública do frontend, sem `.env.integration.local` ou credenciais de usuário para o smoke autenticado.
+
+Pendências para concluir a liberação operacional: smoke PostgREST autenticado e validação de concorrência entre conexões PostgreSQL reais; revisão dos advisors; definição da empresa, dos perfis destinatários e das permissões a conceder por backend autorizado. Esses itens não foram comprovados pelo SELECT estrutural. A integração hospedada existente testa a fundação SaaS e não cobre o workflow documental; `npm run test:integration` isoladamente não comprova o fluxo v1/v2 de Documentos.
