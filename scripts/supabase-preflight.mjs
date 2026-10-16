@@ -6,7 +6,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 
 export const officialProjectRef = 'yequhfvcbwnxmqobgumu'
 export const cliVersion = '2.121.0'
-const repositoryRoot = fileURLToPath(new URL('..', import.meta.url))
+export const repositoryRoot = fileURLToPath(new URL('..', import.meta.url))
 
 export function readPassword(input = process.stdin, output = process.stdout) {
   if (!input.isTTY || !output.isTTY || typeof input.setRawMode !== 'function') {
@@ -55,21 +55,24 @@ export function redact(text, password) {
   return patterns.reduce((value, secret) => value.replaceAll(secret, '[REDACTED]'), String(text))
 }
 
-export function buildCommands(root, env) {
+export function buildCliArgs(root, env, command) {
   const npmCli = env.npm_execpath
   if (!npmCli || (!isAbsolute(npmCli) && !win32.isAbsolute(npmCli)) || !/\.m?js$/i.test(npmCli)) {
-    throw new Error('Execute pelo npm: npm.cmd run supabase:preflight (Windows) ou npm run supabase:preflight (Linux/macOS).')
+    throw new Error('Execute este comando pelo npm, usando o script publicado no repositorio.')
   }
   const target = ['--linked', '--project-ref', officialProjectRef, '--profile', 'supabase', '--workdir', root]
-  const prefix = [npmCli, 'exec', '--yes', `--package=supabase@${cliVersion}`, '--', 'supabase']
+  return [npmCli, 'exec', '--yes', `--package=supabase@${cliVersion}`, '--', 'supabase', ...command, ...target]
+}
+
+export function buildCommands(root, env) {
   return [
-    { name: 'Historico remoto de migrations', args: [...prefix, 'migration', 'list', ...target] },
-    { name: 'Simulacao de aplicacao (sem aplicar migrations)', args: [...prefix, 'db', 'push', '--dry-run', '--skip-vault', ...target] },
+    { name: 'Historico remoto de migrations', args: buildCliArgs(root, env, ['migration', 'list']) },
+    { name: 'Simulacao de aplicacao (sem aplicar migrations)', args: buildCliArgs(root, env, ['db', 'push', '--dry-run', '--skip-vault']) },
   ]
 }
 
 // Buffer CLI output until completion so a credential split across chunks is redacted too.
-export function runCommand(args, { root, env, password, output = process.stdout, errorOutput = process.stderr, spawnProcess = spawn }) {
+export function runCommand(args, { root, env, password, output = process.stdout, errorOutput = process.stderr, spawnProcess = spawn, parseOutput, quiet = false }) {
   return new Promise((resolve, reject) => {
     const child = spawnProcess(process.execPath, args, { cwd: root, env, shell: false, stdio: ['ignore', 'pipe', 'pipe'] })
     const stdout = []
@@ -86,27 +89,37 @@ export function runCommand(args, { root, env, password, output = process.stdout,
     child.once('error', () => reject(new Error('Nao foi possivel iniciar o Supabase CLI pelo npm.')))
     child.once('close', (code, signal) => {
       if (overflow) return reject(new Error('Saida do CLI excedeu o limite; operacao interrompida.'))
-      output.write(redact(Buffer.concat(stdout).toString('utf8'), password))
+      const status = signal ? 130 : code ?? 1
+      const text = Buffer.concat(stdout).toString('utf8')
+      if (!quiet || status !== 0) output.write(redact(text, password))
       errorOutput.write(redact(Buffer.concat(stderr).toString('utf8'), password))
-      resolve(signal ? 130 : code ?? 1)
+      if (!parseOutput) return resolve(status)
+      if (status !== 0) return resolve({ code: status, data: null })
+      try { resolve({ code: status, data: parseOutput(text) }) }
+      catch { reject(new Error('Resposta estruturada do CLI invalida; operacao interrompida.')) }
     })
   })
 }
 
-export async function preflight({ root = repositoryRoot, env = process.env, prompt = readPassword, run = runCommand, output = process.stdout } = {}) {
+export async function withDatabasePassword({ root = repositoryRoot, env = process.env, prompt = readPassword, output = process.stdout, action }) {
   let linkedRef
   try { linkedRef = (await readFile(join(root, 'supabase', '.temp', 'project-ref'), 'utf8')).trim() }
   catch { throw new Error('Vinculo Supabase indisponivel. Este comando exige o projeto oficial ja vinculado neste checkout.') }
   if (linkedRef !== officialProjectRef) throw new Error('O checkout nao esta vinculado ao projeto oficial esperado. Nenhuma credencial foi solicitada ou enviada.')
-  const commands = buildCommands(root, env)
-  output.write(`Preflight do projeto ${officialProjectRef}; CLI ${cliVersion}. Apenas listagem e dry-run.\n`)
+  buildCliArgs(root, env, ['migration', 'list'])
   let password = env.SUPABASE_DB_PASSWORD || await prompt()
   if (!password.length) throw new Error('Senha vazia. Nenhuma conexao foi iniciada.')
   const childEnv = { ...env, SUPABASE_DB_PASSWORD: password, SUPABASE_PROJECT_ID: officialProjectRef, SUPABASE_WORKDIR: root, SUPABASE_PROFILE: 'supabase', SUPABASE_DEBUG: 'false', SUPABASE_TELEMETRY_DEBUG: 'false' }
-  try {
-    for (const command of commands) {
+  try { return await action({ root, env: childEnv, password, output }) }
+  finally { delete childEnv.SUPABASE_DB_PASSWORD; password = '' }
+}
+
+export async function preflight({ root = repositoryRoot, env = process.env, prompt = readPassword, run = runCommand, output = process.stdout } = {}) {
+  return withDatabasePassword({ root, env, prompt, output, action: async context => {
+    output.write(`Preflight do projeto ${officialProjectRef}; CLI ${cliVersion}. Apenas listagem e dry-run.\n`)
+    for (const command of buildCommands(root, env)) {
       output.write(`\n${command.name}...\n`)
-      const code = await run(command.args, { root, env: childEnv, password, output })
+      const code = await run(command.args, context)
       if (code !== 0) {
         output.write('Etapa interrompida. A senha substitui o login temporario, mas nao restaura um banco indisponivel.\n')
         return code
@@ -114,10 +127,7 @@ export async function preflight({ root = repositoryRoot, env = process.env, prom
     }
     output.write('\nPreflight concluido. O dry-run nao executou migrations nem comprovou suas precondicoes SQL.\n')
     return 0
-  } finally {
-    delete childEnv.SUPABASE_DB_PASSWORD
-    password = ''
-  }
+  } })
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

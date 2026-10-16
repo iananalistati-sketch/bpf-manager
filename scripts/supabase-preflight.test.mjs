@@ -78,7 +78,7 @@ test('caminhos Windows com espacos sao argumentos separados para Node, sem shell
   const commands = buildCommands(root, { npm_execpath: npmCli })
   assert.equal(commands[0].args[0], npmCli)
   assert.equal(commands[0].args.at(-1), root)
-  assert.throws(() => buildCommands(root, {}), /Execute pelo npm/)
+  assert.throws(() => buildCommands(root, {}), /pelo npm/)
 })
 
 test('prompt exige TTY', async () => {
@@ -158,4 +158,27 @@ test('TTY inicialmente sem fluxo volta a pausar para permitir o processo encerra
   assert.equal(await pending, 'senha-ficticia')
   assert.equal(input.isRaw, false)
   assert.equal(input.isPaused(), true)
+})
+
+
+test('parser interno usa JSON bruto sem expor senha coincidente com metadados', async t => {
+  const root = await project(t)
+  const file = join(root, 'json-cli.mjs')
+  await writeFile(file, `process.stdout.write(JSON.stringify({version:'2026'}))`)
+  const output = silent()
+  const result = await runCommand([file], { root, env: process.env, password: '2026', output, errorOutput: silent(), quiet: true, parseOutput: JSON.parse })
+  assert.deepEqual(result, { code: 0, data: { version: '2026' } })
+  assert.equal(output.value(), '')
+})
+
+test('JSON invalido nao ecoa o conteudo bruto na excecao', async t => {
+  const root = await project(t)
+  const file = join(root, 'invalid-json-cli.mjs')
+  await writeFile(file, `process.stdout.write(process.env.SUPABASE_DB_PASSWORD)`)
+  const output = silent()
+  await assert.rejects(runCommand([file], { root, env: { ...process.env, SUPABASE_DB_PASSWORD: password }, password, output, errorOutput: silent(), quiet: true, parseOutput: JSON.parse }), error => {
+    assert.ok(!error.message.includes(password))
+    return /estruturada/.test(error.message)
+  })
+  assert.equal(output.value(), '')
 })

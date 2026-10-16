@@ -2,6 +2,7 @@ import { readdir, readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { PGlite } from '@electric-sql/pglite'
+import { checkNames } from './supabase-apply-documentos.mjs'
 
 const root = fileURLToPath(new URL('..', import.meta.url))
 const migrationsDir = join(root, 'supabase', 'migrations')
@@ -139,6 +140,36 @@ try {
       `)
     }
   }
+
+  // Replay the exact read-only hosted inspection against the reconstructed final schema.
+  await db.exec(`CREATE SCHEMA supabase_migrations;
+    CREATE TABLE supabase_migrations.schema_migrations(version text PRIMARY KEY)`)
+  for (const path of migrations) {
+    await db.query('INSERT INTO supabase_migrations.schema_migrations(version) VALUES ($1)', [path.split('/').at(-1).slice(0, 14)])
+  }
+  const verificationSql = await read('scripts/sql/verify-documentos-deploy.sql')
+  const { rows: verified } = await db.query(verificationSql)
+  if (verified.length !== 1 || checkNames.some(name => verified[0][name] !== true)) {
+    throw new Error(`Hosted metadata inspection disagrees with final schema: ${JSON.stringify(verified)}`)
+  }
+  for (const [mutation, check] of [
+    ['GRANT SELECT(titulo) ON public.documentos TO authenticated', 'tabelas_fechadas'],
+    ['GRANT EXECUTE ON FUNCTION private.tenant_tem_permissao(uuid,text) TO PUBLIC', 'helpers_fechados'],
+    ['ALTER TABLE public.documento_versoes ALTER COLUMN titulo DROP NOT NULL', 'contratos_versionados'],
+    ['ALTER TABLE public.documentos DROP CONSTRAINT documentos_unidade_empresa_fkey; ALTER TABLE public.documentos ADD CONSTRAINT documentos_unidade_empresa_fkey FOREIGN KEY (unidade_id) REFERENCES public.unidades(id)', 'integridade_documental'],
+    ["DROP INDEX public.idx_documento_versoes_um_vigente; CREATE UNIQUE INDEX idx_documento_versoes_um_vigente ON public.documento_versoes(id) WHERE status='vigente'", 'integridade_documental'],
+    ['ALTER TABLE public.documento_versoes DROP CONSTRAINT documento_versoes_documento_numero_key; ALTER TABLE public.documento_versoes ADD CONSTRAINT documento_versoes_documento_numero_key UNIQUE (id,numero)', 'integridade_documental'],
+    ["DROP FUNCTION public.documento_transicionar(uuid,text,text,uuid); CREATE FUNCTION public.documento_transicionar(p_documento_id uuid,p_status_destino text,p_justificativa text,p_versao_id uuid) RETURNS void LANGUAGE plpgsql AS 'begin return; end'", 'contratos_versionados'],
+    ["INSERT INTO supabase_migrations.schema_migrations(version) VALUES ('invalid-legacy-version')", 'historico_exato'],
+  ]) {
+    await db.exec(`BEGIN; ${mutation};`)
+    try {
+      const { rows } = await db.query(verificationSql)
+      if (rows.length !== 1 || rows[0][check] !== false) throw new Error(`Metadata inspection accepted drift: ${check}`)
+    } finally { await db.exec('ROLLBACK') }
+  }
+  await db.exec('DROP TABLE supabase_migrations.schema_migrations; DROP SCHEMA supabase_migrations')
+  console.log('PASS: hosted inspection checks final schema and rejects column grants, helper exposure, snapshot/default drift, disguised keys/indexes and hidden history entries')
 
   for (const path of testSuites) {
     console.log(`RUN: ${path.split('/').at(-1)}`)

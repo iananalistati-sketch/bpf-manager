@@ -77,3 +77,29 @@ Fontes do comportamento: Supabase CLI tag v2.121.0, `apps/cli/src/command-intern
 
 
 Gates 07 e 09 do helper: APROVADOS. QA deste bloco: `validate:local` com exit code 0 (31 migrations, 17 suítes SQL, build, lint e 49 E2E); depois do ajuste de lifecycle da entrada, os 16 testes de tooling passaram novamente. Prompt oculto tambem foi exercitado em PTY Linux real, com senha ficticia, e encerrou com exit code 0. Sem execucao Windows real e sem acesso remoto. Nenhuma migration anterior foi modificada.
+
+
+## Aplicacao controlada de Documentos — 16/10/2026
+
+O usuario confirmou a execucao do preflight no projeto oficial: as 29 migrations anteriores estao alinhadas e somente `20261014124000_document_control_foundation.sql` e `20261015203000_document_control_integrity.sql` estao pendentes. A conexao com senha PostgreSQL funcionou; o problema observado estava na rota de criacao de login temporario do CLI. Esse resultado ainda nao significa que as migrations foram aplicadas.
+
+O comando explicito `npm.cmd run supabase:apply:documentos` prepara a aplicacao real dessas duas migrations, usando a mesma senha oculta. Ele nao aceita argumentos adicionais.
+
+- Valida os nomes e SHA256 das 31 migrations e do SQL verificador, normalizando apenas CRLF para LF. Revalida imediatamente antes do push. Nenhuma migration antiga foi editada.
+- Exige vinculo oficial, CLI/perfil/diretorio fixos e historico remoto JSON com prefixo de 29 alinhadas e somente as duas pendentes. Lista estranha, duplicada, faltante ou divergente interrompe a operacao.
+- Usa apenas `db push --linked --skip-vault --yes`; nao inclui seed, roles, include-all, reset ou repair. Invocar esse script e a acao explicita de aplicacao. O comando preflight continua somente leitura/dry-run.
+- Cada migration tem sua propria transacao. A primeira pode ser confirmada e a segunda falhar. Por isso o historico e consultado apos qualquer tentativa, inclusive exit code de erro ou falha de processo.
+- Uma execucao com 31 alinhadas nao repete o push: executa somente os checks finais. Estado parcial anterior (30 aplicada e 31 pendente) e recusado para diagnostico; nao ha reparo ou retomada automatica.
+- A consulta estrutural e um SELECT fixo de metadados. Exige exatamente uma linha com oito resultados booleanos true: historico completo de 31 versoes; tabelas/RLS/grants inclusive por coluna; seis RPCs/ACL/owners/search_path e ausencia de assinaturas antigas; helpers privados; snapshots/contratos; FK e unicidades; roles restritas; quatro permissoes documentais. Nao concede permissoes a perfis nem consulta dados de clientes.
+- `db query --linked` usa a Management API e seu login ja existente no CLI, um canal diferente da conexao com senha do PostgreSQL. Falha nesse canal apos o push nao desfaz a aplicacao. O estado distingue claramente historico confirmado de verificacao estrutural pendente.
+
+Estados de saida: `HISTORICO_31_E_ESTRUTURA_OK`, `HISTORICO_31_VERIFICACAO_PENDENTE`, `PARCIAL_30`, `HISTORICO_29` ou `INDETERMINADO`. Estados incompletos retornam falha. O exit code original de um push com erro e preservado mesmo se a leitura posterior confirmar as 31; nao ha retry automatico.
+
+O parser JSON usa a resposta bruta apenas em memoria: expurgar uma senha que coincida com um trecho de timestamp nao pode adulterar o historico usado para autorizar o push. Logs continuam expurgados e o buffer bruto nao e exposto em excecoes.
+
+A verificacao estrutural nao substitui smoke PostgREST, advisors ou habilitacao explicita dos perfis. A aplicacao real continua dependendo da execucao do comando pelo usuario no computador que possui o acesso ao projeto oficial; o ambiente cloud nao recebeu senha ou credenciais administrativas.
+
+
+Gates 08, 09 e 07 do rollout: APROVADOS. A verificacao compara as colunas reais de FK/uniques/indice de vigente, nao apenas nomes, e confere parametro/default p_versao_id nas tres mutations. QA: 36 testes de tooling, 31 migrations/17 suites SQL, build/lint e 49 E2E aprovados; apos endurecer o SELECT final, o banco e tooling foram reexecutados e passaram com oito regressões de drift estrutural. O verificador foi exercitado contra o mesmo schema cumulativo local, sem conectar ao projeto remoto.
+
+Precisao do historico: a CLI omite versoes remotas invalidas/nao numericas na listagem. A guarda pre-push compara estritamente as linhas que a CLI informa; a comparacao SQL `historico_exato` no pos-check e quem verifica o ledger bruto completo, incluindo entradas nao numericas.
