@@ -28,11 +28,11 @@ export function UsuarioDetails({ usuario, data, onClose, onChanged }: {
   }
   const changeStatus = async (status: 'ativo' | 'inativo' | 'bloqueado') => {
     const label = statusLabels[status]
-    if ((status === 'inativo' || status === 'bloqueado') && !window.confirm(`Confirma alterar o status de ${usuario.nome || usuario.email || 'este usuário'} para ${label}?`)) return
+    if ((status === 'inativo' || status === 'bloqueado') && !window.confirm(`Confirma alterar o acesso nesta empresa de ${usuario.nome || usuario.email || 'este usuário'} para ${label}?`)) return
     done(await actions.alterarStatus(usuario.id, status, statusReason))
   }
   const changeUnit = async () => {
-    if (!window.confirm('Confirma a alteração de unidade deste usuário?')) return
+    if (!window.confirm('Confirma a alteração de unidade neste vínculo empresarial?')) return
     done(await actions.alterarUnidade(usuario.id, unitId || null, unitReason))
   }
   const changeProfile = async (perfilId: string, acao: 'atribuir' | 'remover') => {
@@ -46,7 +46,7 @@ export function UsuarioDetails({ usuario, data, onClose, onChanged }: {
     <div className="settings-detail-intro"><h3>{usuario.nome || 'Nome não informado'}</h3><p>{usuario.email || 'E-mail não informado'}</p><StatusBadge status={usuario.status} /></div>
     {pending && <p className="settings-notice warning"><AlertTriangle size={18} /><span><strong>Cadastro pendente.</strong> Este registro não pode ser ativado por edição direta. Novos acessos devem usar o fluxo seguro de convite e vínculo.</span></p>}
     {!pending && <p className="settings-notice"><ShieldCheck size={18} /><span><strong>Administração protegida.</strong> Alterações são executadas por comandos seguros no servidor, exigem justificativa e geram trilha de auditoria.</span></p>}
-    {isSelf && !pending && <p className="settings-notice warning"><LockKeyhole size={18} />Por segurança, você não pode bloquear/inativar a própria conta nem alterar seus próprios perfis administrativos.</p>}
+    {isSelf && !pending && <p className="settings-notice warning"><LockKeyhole size={18} />Por segurança, você não pode bloquear/inativar o próprio acesso nesta empresa nem alterar seus próprios perfis administrativos.</p>}
     {actions.error && <p className="settings-notice warning" role="alert"><AlertTriangle size={18} />{actions.error}</p>}
 
     <fieldset className="settings-fields" disabled>
@@ -54,13 +54,13 @@ export function UsuarioDetails({ usuario, data, onClose, onChanged }: {
       <label>Nome<input value={usuario.nome ?? ''} readOnly placeholder="Não informado" /></label>
       <label>E-mail<input value={usuario.email ?? ''} readOnly placeholder="Não informado" /></label>
       <label>Empresa<select value={usuario.empresa_id ?? ''} disabled><option value="">Não vinculada</option>{data.empresas.map(empresa => <option key={empresa.id} value={empresa.id}>{empresa.nome_fantasia || empresa.razao_social}</option>)}</select></label>
-      <label>Situação do cadastro<input value={usuario.ativo ? 'Ativo' : 'Inativo'} readOnly /></label>
+      <label>Situação da identidade global<input value={`${usuario.identidade_ativa ? 'Habilitada' : 'Inativa'} · ${statusLabels[usuario.identidade_status]}`} readOnly /></label>
     </fieldset>
     <button className="button primary" disabled>Salvar alterações</button>
 
     {!pending && <div className="settings-admin-stack">
       <section className="settings-admin-card" aria-labelledby="status-admin-title">
-        <div><h4 id="status-admin-title">Status de acesso</h4><p>Ative, inative ou bloqueie o usuário. O servidor impede auto-bloqueio e perda do último administrador efetivo.</p></div>
+        <div><h4 id="status-admin-title">Status do vínculo nesta empresa</h4><p>Ative, inative ou bloqueie o acesso nesta empresa. O servidor impede auto-bloqueio e perda do último administrador efetivo.</p></div>
         <label>Justificativa<input value={statusReason} onChange={event => { actions.clearError(); setStatusReason(event.target.value) }} placeholder="Informe o motivo da alteração" /></label>
         <div className="settings-future-actions">
           <button className="button secondary" disabled={actions.busy !== null || usuario.status === 'ativo' || statusReason.trim().length < 5} onClick={() => void changeStatus('ativo')}>Ativar</button>
@@ -94,6 +94,6 @@ export function UsuarioDetails({ usuario, data, onClose, onChanged }: {
       {data.perfis.length === 0 ? <p>Nenhum perfil disponível para consulta.</p> : data.perfis.map(perfil => <label key={perfil.id}><input type="checkbox" checked={assigned.has(perfil.id)} readOnly /><span>{perfil.nome}{!perfil.ativo && ' (inativo)'}</span></label>)}
       {assigned.size === 0 && <p className="settings-muted">Nenhum vínculo de perfil visível para este usuário.</p>}
     </fieldset><div className="settings-future-actions"><button className="button secondary" disabled>Ativar</button><button className="button secondary" disabled>Inativar</button><button className="button secondary" disabled>Bloquear</button></div></>}
-    <p className="settings-muted">Cadastrado em {displayDate(usuario.created_at)}. Toda escrita habilitada nesta tela passa pelo backend auditado.</p>
+    <p className="settings-muted">Vínculo desde {displayDate(usuario.created_at)}. Toda escrita habilitada nesta tela passa pelo backend auditado.</p>
   </DetailsDialog>
 }

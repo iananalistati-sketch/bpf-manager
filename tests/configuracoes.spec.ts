@@ -16,7 +16,7 @@ const allPermissions = [
   'usuarios.gerenciar', 'usuarios.convidar', 'perfis.gerenciar', 'estrutura.gerenciar', 'auditoria.visualizar', 'configuracoes.gerenciar',
 ]
 const context: MeuContexto = { usuario_id: userId, nome: 'Ana Qualidade', email: 'ana@example.test', ativo: true, status: 'ativo', empresa_id: companyId, nome_fantasia: 'Empresa de teste', razao_social: 'Empresa de teste', unidade_id: unitId, unidade_nome: 'Unidade Principal', perfis: ['Administrador'], permissoes: allPermissions }
-const baseUser = { id: userId, nome: 'Ana Qualidade', email: 'ana@example.test', empresa_id: companyId, unidade_id: unitId, status: 'ativo', ativo: true, created_at: '2026-09-15T12:00:00Z' }
+const baseUser = { id: userId, membership_id:'91000000-0000-0000-0000-000000000001',identidade_ativa:true,identidade_status:'ativo', nome: 'Ana Qualidade', email: 'ana@example.test', empresa_id: companyId, unidade_id: unitId, status: 'ativo', ativo: true, created_at: '2026-09-15T12:00:00Z' }
 const profiles = ['Administrador', 'Responsável Técnico', 'Qualidade', 'Supervisor', 'Operador', 'Auditor', 'Consulta'].map((nome, index) => ({ id: `40000000-0000-0000-0000-${String(index + 1).padStart(12, '0')}`, empresa_id: null, nome, descricao: `Perfil ${nome}`, is_system: true, ativo: true }))
 const authBootstrapTables = new Set(['v_meu_contexto', 'meus_vinculos', 'meu_contexto_empresa'])
 
@@ -31,10 +31,16 @@ async function setup(page: Page, permissions = allPermissions, options: { empty?
   }, { userId })
   await page.route('https://bpf-test.supabase.co/**', async route => {
     const url = new URL(route.request().url())
-    const table = url.pathname.split('/').pop() ?? ''
+    const rpc = url.pathname.split('/').pop() ?? ''
+    const body = route.request().postDataJSON() as { p_recurso?: string; p_offset?: number } | null
+    const isReader = rpc === 'admin_contexto_ler'
+    const table = isReader ? body?.p_recurso ?? '' : rpc
     requests.push({ table, url: url.toString(), method: route.request().method(), body: route.request().postData() })
     if (!url.pathname.startsWith('/rest/v1/')) return route.fulfill({ status: 200, json: {} })
-    if (url.pathname.startsWith('/rest/v1/rpc/')) return route.fulfill({ status: 200, json: null })
+    if (rpc === 'meu_contexto_empresa') return route.fulfill({status:200,json:[current]})
+    if (['meus_vinculos','meu_workspace_comercial'].includes(rpc)) return route.fulfill({status:200,json:[]})
+    if (rpc === 'admin_usuario_status_tenant') return route.fulfill({status:200,json:null})
+    if (url.pathname.startsWith('/rest/v1/rpc/') && !isReader) return route.fulfill({status:404,json:{code:'PGRST202',message:'Unknown RPC'}})
     if (table === 'usuarios' && options.delay) await new Promise(resolve => setTimeout(resolve, options.delay))
     if (table === 'usuarios' && options.fail) return route.fulfill({ status: 403, json: { message: 'Permission denied', code: '42501' } })
     const data: Record<string, unknown[]> = {
@@ -48,7 +54,7 @@ async function setup(page: Page, permissions = allPermissions, options: { empty?
       perfil_permissoes: [{ perfil_id: profileId, permissao_id: 'permission-1' }],
     }
     const rows = data[table] ?? []
-    return route.fulfill({ status: 200, json: rows, headers: { 'content-range': `0-${Math.max(rows.length - 1, 0)}/${rows.length}`, 'access-control-expose-headers': 'content-range' } })
+    return route.fulfill({ status: 200, json: isReader ? {data:rows.slice(body?.p_offset??0,(body?.p_offset??0)+500),count:rows.length} : rows, headers: { 'content-range': `0-${Math.max(rows.length - 1, 0)}/${rows.length}`, 'access-control-expose-headers': 'content-range' } })
   })
   return { errors, requests, options }
 }
@@ -77,8 +83,8 @@ test('administrador mantém todos os módulos e navega por usuários e perfis', 
   await expect(page.getByRole('dialog').getByRole('checkbox', { name: /Aprovar/ })).not.toBeChecked()
   await expect(page.getByRole('button', { name: 'Salvar permissões' })).toBeDisabled()
   expect(result.errors).toEqual([])
-  expect(result.requests.filter(request => !authBootstrapTables.has(request.table)).every(request => request.method === 'GET')).toBe(true)
-  expect(result.requests.filter(request => request.table === 'usuarios').every(request => new URL(request.url).searchParams.get('empresa_id') === `eq.${companyId}`)).toBe(true)
+  expect(result.requests.filter(request => !authBootstrapTables.has(request.table)).every(request => request.method === 'POST')).toBe(true)
+  expect(result.requests.filter(request => request.table === 'usuarios').every(request => JSON.parse(request.body ?? '{}').p_empresa_id === companyId)).toBe(true)
 })
 
 test('alteração administrativa usa RPC protegida e recarrega a listagem', async ({ page }) => {
@@ -91,7 +97,7 @@ test('alteração administrativa usa RPC protegida e recarrega a listagem', asyn
   await dialog.getByRole('button', { name: 'Bloquear', exact: true }).click()
   await expect(dialog).toHaveCount(0)
   await expect(page.getByRole('button', { name: 'Ver detalhes de Maria Qualidade' })).toBeVisible()
-  const rpc = result.requests.find(request => request.table === 'admin_usuario_alterar_status')
+  const rpc = result.requests.find(request => request.table === 'admin_usuario_status_tenant')
   expect(rpc?.method).toBe('POST')
   expect(rpc?.body).toContain(colleagueId)
   expect(rpc?.body).toContain('bloqueado')
@@ -155,7 +161,7 @@ test('filtros locais e detalhe pendente preservam fluxo dedicado', async ({ page
   const pendingDialog = page.getByRole('dialog')
   await expect(pendingDialog).toContainText('Cadastro pendente.')
   await expect(pendingDialog).toContainText('Novos acessos devem usar o fluxo seguro de convite e vínculo.')
-  await expect(pendingDialog.getByRole('heading', { name: 'Status de acesso' })).toHaveCount(0)
+  await expect(pendingDialog.getByRole('heading', { name: 'Status do vínculo nesta empresa' })).toHaveCount(0)
   await page.keyboard.press('Escape')
   await page.getByLabel('Nome ou e-mail').fill('inexistente')
   await expect(page.getByText('Nenhum usuário corresponde aos filtros selecionados.')).toBeVisible()
@@ -199,7 +205,7 @@ test('serviço nega contexto revogado antes de consultar tabelas administrativas
   const client = createClient('https://bpf-test.supabase.co', 'test-key', { auth: { persistSession: false }, global: { fetch: async input => { paths.push(String(input)); return new Response(JSON.stringify([{ ...context, permissoes: ['configuracoes.visualizar'] }]), { headers: { 'content-type': 'application/json' } }) } } })
   await expect(createConfiguracoesService(client).usuarios({ usuarioId: userId, empresaId: companyId }, new AbortController().signal)).rejects.toThrow('não está mais disponível')
   expect(paths).toHaveLength(1)
-  expect(paths[0]).toContain('v_meu_contexto')
+  expect(paths[0]).toContain('meu_contexto_empresa')
 })
 
 for (const scenario of [
@@ -216,21 +222,29 @@ for (const scenario of [
     const client = createClient('https://bpf-test.supabase.co', 'test-key', { auth: { persistSession: false }, global: { fetch: async input => { paths.push(String(input)); return new Response(JSON.stringify([{ ...context, ...scenario.override }]), { headers: { 'content-type': 'application/json' } }) } } })
     await expect(createConfiguracoesService(client).usuarios(scenario.scope ?? { usuarioId: userId, empresaId: companyId }, new AbortController().signal)).rejects.toThrow('não está mais disponível')
     if (scenario.scope?.empresaId && scenario.scope.empresaId !== companyId) expect(paths.length).toBeGreaterThanOrEqual(1)
-    else { expect(paths).toHaveLength(1); expect(paths[0]).toContain('v_meu_contexto') }
+    else { expect(paths).toHaveLength(1); expect(paths[0]).toContain('meu_contexto_empresa') }
   })
 }
 
 test('serviço envia mutação somente após revalidar a permissão', async () => {
   const paths: { url: string; method: string; body: string | null }[] = []
-  const client = createClient('https://bpf-test.supabase.co', 'test-key', { auth: { persistSession: false }, global: { fetch: async (input, init) => { const url=String(input);paths.push({url,method:init?.method??'GET',body:typeof init?.body==='string'?init.body:null});if(url.includes('v_meu_contexto'))return new Response(JSON.stringify([context]),{headers:{'content-type':'application/json'}});return new Response('null',{headers:{'content-type':'application/json'}}) } } })
+  const client = createClient('https://bpf-test.supabase.co', 'test-key', { auth: { persistSession: false }, global: { fetch: async (input, init) => { const url=String(input);paths.push({url,method:init?.method??'GET',body:typeof init?.body==='string'?init.body:null});if(url.includes('meu_contexto_empresa'))return new Response(JSON.stringify([context]),{headers:{'content-type':'application/json'}});return new Response('null',{headers:{'content-type':'application/json'}}) } } })
   await createConfiguracoesService(client).alterarStatus({ usuarioId: userId, empresaId: companyId }, colleagueId, 'bloqueado', 'Teste de bloqueio administrativo')
-  expect(paths).toHaveLength(2); expect(paths[0].url).toContain('v_meu_contexto'); expect(paths[1].url).toContain('/rpc/admin_usuario_alterar_status'); expect(paths[1].method).toBe('POST'); expect(paths[1].body).toContain(colleagueId)
+  expect(paths).toHaveLength(2); expect(paths[0].url).toContain('meu_contexto_empresa'); expect(paths[1].url).toContain('/rpc/admin_usuario_status_tenant'); expect(paths[1].method).toBe('POST'); expect(paths[1].body).toContain(colleagueId)
 })
 
 test('serviço pagina respostas acima do limite do servidor', async () => {
   const permissions = Array.from({ length: 501 }, (_, i) => ({ id: `permission-${i}`, codigo: `modulo.acao_${i}`, modulo: 'modulo', acao: `acao_${i}`, descricao: null }))
   const offsets: number[] = []
-  const client = createClient('https://bpf-test.supabase.co', 'test-key', { auth: { persistSession: false }, global: { fetch: async input => { const url=new URL(String(input));const table=url.pathname.split('/').pop();const all=table==='v_meu_contexto'?[context]:table==='permissoes'?permissions:[];const from=Number(url.searchParams.get('offset')??0);if(table==='permissoes')offsets.push(from);return new Response(JSON.stringify(all.slice(from,from+500)),{headers:{'content-type':'application/json','content-range':`0-0/${all.length}`}}) } } })
+  const client = createClient('https://bpf-test.supabase.co','test-key',{auth:{persistSession:false},global:{fetch:async(input,init)=>{
+    const url=String(input)
+    const body=JSON.parse(typeof init?.body==='string'?init.body:'{}')
+    if(url.includes('meu_contexto_empresa'))return new Response(JSON.stringify([context]),{headers:{'content-type':'application/json'}})
+    const all=body.p_recurso==='permissoes'?permissions:[]
+    const from=body.p_offset??0
+    if(body.p_recurso==='permissoes')offsets.push(from)
+    return new Response(JSON.stringify({data:all.slice(from,from+500),count:all.length}),{headers:{'content-type':'application/json'}})
+  }}})
   const data = await createConfiguracoesService(client).perfis({ usuarioId: userId, empresaId: companyId }, new AbortController().signal)
   expect(data.permissoes).toHaveLength(501)
   expect(offsets).toEqual([0, 500])

@@ -60,11 +60,12 @@ Esperadas no Marco 01:
 
 ## Segurança multiempresa
 
-- comandos derivam empresa do ator autenticado, nunca de um `empresa_id` enviado pelo frontend;
+- contratos atuais recebem `p_empresa_id` explícito e validam a empresa contra JWT, identidade ativa e membership/permissões canônicas; a seleção do frontend não concede autorização;
+- wrappers antigos resolvem apenas a empresa principal e delegam aos mesmos comandos canônicos; revogar o vínculo bloqueia leitura e escrita mesmo que perfis legados permaneçam;
 - unidade deve pertencer à mesma empresa;
 - perfil deve ser global de sistema compatível ou pertencer à empresa;
 - usuário alvo deve estar no mesmo tenant, salvo o fluxo específico de convite pendente com alvo explícito;
-- auditoria deve usar a empresa derivada do ator;
+- auditoria deve usar a empresa autorizada da operação e identificar o membership do ator;
 - usuário pendente sem empresa não pode ser enumerado globalmente.
 
 ## Teto de delegação
@@ -91,3 +92,15 @@ Operações que possam remover a capacidade administrativa efetiva devem preserv
 - nomes de policies/triggers/indexes devem ser únicos ou substituídos explicitamente;
 - grants de coluna devem cobrir todas as colunas lidas por `%ROWTYPE` ou queries internas;
 - estado final de memberships/`SET ROLE` deve ser explicitamente verificável.
+
+## Estado adicional 32 — Administração por tenant
+
+`bpf_tenant_admin` é NOLOGIN, NOINHERIT, NOSUPERUSER, NOBYPASSRLS, sem SET por authenticated ou postgres no estado final. Implementações privadas SECURITY DEFINER pertencem a essa role; wrappers públicos são SECURITY INVOKER, todos com search_path vazio. ACLs são ajustadas antes da transferência de owner. Helpers de autorização pertencem a postgres com acesso privado restrito; a variável local de escopo sozinha não autoriza nenhuma operação.
+
+Contratos públicos/privados: `admin_contexto_ler` e `admin_usuario_status_tenant`, `admin_usuario_unidade_tenant`, `admin_usuario_perfil_tenant`, `admin_empresa_tenant`, `admin_unidade_tenant`, `admin_setor_tenant`, `admin_perfil_tenant`. A leitura usa whitelist de recursos, JSON `{data,count}`, ordenação determinística e páginas de até 500 linhas; não oferece SQL dinâmico do cliente. Não existe fallback para leituras administrativas legadas no frontend.
+
+A role recebe apenas SELECT de identidade e grants de coluna nas relações do tenant. Não escreve em usuarios ou usuario_perfis. Status/unidade/perfil são alterados em usuario_empresas/usuario_empresa_perfis; alterações globais de identidade estão fora deste fluxo. Não pode trocar empresa, owner, identidade ou campos fora do contrato. Perfis globais são somente leitura; teto de delegação e perfil em uso são verificados antes da mutation. Inativação protege próprio vínculo, último administrador efetivo e último owner ativo.
+
+Toda escrita valida acesso, obtém lock de empresa, revalida permissão, bloqueia linha comercial, valida modo de escrita e alvos, muda estado e registra auditoria na mesma transação. O escopo GUC anterior é restaurado em sucesso/erro. O convite server-only verifica o ator real antes e depois do lock e respeita trial/somente leitura. Os contadores de uso/quota, billing e checkout dão precedência ao membership canônico sobre o fallback legado.
+
+As 17 suites históricas validam o contrato até31; nove suites compatíveis são repetidas no estado32, além da matriz nova de administração e QA secundário. Testes antigos que exigem alteração da identidade global representam o contrato histórico, não são usados como expectativa pós32. A verificação remota de metadados não substitui smoke autenticado, concorrência PostgreSQL ou advisors.

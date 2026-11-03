@@ -22,6 +22,9 @@ export interface UsuarioPerfil { usuario_id: string; perfil_id: string }
 export interface PerfilPermissao { perfil_id: string; permissao_id: string }
 export interface Usuario {
   id: string
+  membership_id: string
+  identidade_ativa: boolean
+  identidade_status: UsuarioStatus
   nome: string | null
   email: string | null
   empresa_id: string | null

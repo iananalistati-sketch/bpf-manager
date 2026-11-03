@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useAuth } from '../../../hooks/useAuth'
 import { hasPermission } from '../../../lib/permissions'
 import { supabase } from '../../../lib/supabase'
@@ -42,31 +42,43 @@ function useConfiguracoesQuery<T>(permission: string, loader: (scope: ReadScope,
 
 function useActionRunner() {
   const { contexto, session, refreshContexto } = useAuth()
-  const [busy, setBusy] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [success, setSuccess] = useState<string | null>(null)
   const scope = contexto?.empresa_id && session?.user.id === contexto.usuario_id
     ? { usuarioId: contexto.usuario_id, empresaId: contexto.empresa_id }
     : null
+  const scopeKey = scope ? `${scope.usuarioId}:${scope.empresaId}` : null
+  const [feedback,setFeedback] = useState<{scopeKey:string|null;busy:string|null;error:string|null;success:string|null}>({scopeKey,busy:null,error:null,success:null})
+  const liveScope = useRef(scopeKey)
+  const operation = useRef(0)
+  useLayoutEffect(() => {
+    liveScope.current=scopeKey
+    operation.current+=1
+    return () => { liveScope.current=null; operation.current+=1 }
+  },[scopeKey])
+  const visible = feedback.scopeKey===scopeKey ? feedback : null
 
   async function run<T>(key: string, action: (currentScope: ReadScope) => Promise<T>, successMessage?: string, refreshContext = false) {
     if (!scope) {
-      setError('Sua sessão administrativa não está disponível. Atualize a página e tente novamente.')
+      setFeedback({scopeKey,busy:null,error:'Sua sessão administrativa não está disponível. Atualize a página e tente novamente.',success:null})
       return { ok: false as const, value: null }
     }
-    setBusy(key); setError(null); setSuccess(null)
+    const request = ++operation.current
+    const isCurrent = () => liveScope.current === scopeKey && operation.current === request
+    setFeedback({scopeKey,busy:key,error:null,success:null})
     try {
       const value = await action(scope)
+      if (!isCurrent()) return { ok: false as const, value: null }
       if (refreshContext) await refreshContexto()
-      if (successMessage) setSuccess(successMessage)
+      if (!isCurrent()) return { ok: false as const, value: null }
+      if (successMessage) setFeedback(previous=>({...previous,success:successMessage}))
       return { ok: true as const, value }
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Não foi possível concluir a alteração.')
+      if (isCurrent()) setFeedback(previous=>({...previous,error:reason instanceof Error ? reason.message : 'Não foi possível concluir a alteração.'}))
       return { ok: false as const, value: null }
-    } finally { setBusy(null) }
+    } finally { if (isCurrent()) setFeedback(previous=>({...previous,busy:null})) }
   }
 
-  return { contexto, scope, busy, error, success, run, clearFeedback: () => { setError(null); setSuccess(null) } }
+  return { contexto, scope, busy:visible?.busy??null, error:visible?.error??null, success:visible?.success??null, run,
+    clearFeedback: () => setFeedback(previous=>({scopeKey,busy:previous.scopeKey===scopeKey?previous.busy:null,error:null,success:null})) }
 }
 
 export function useUsuarioAdminActions() {

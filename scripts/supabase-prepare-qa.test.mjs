@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
 import qaManifest from './qa-workspace-manifest.json' with { type: 'json' }
+import historicalManifest from './documentos-deploy-manifest.json' with { type: 'json' }
 import { checkNames as metadataChecks } from './supabase-apply-documentos.mjs'
 import { classifyQa, diagnoseQa, explainQaDiagnosis, prepareQa, qaSql, validateEmail } from './supabase-prepare-qa.mjs'
 import { officialProjectRef, repositoryRoot, runCommand } from './supabase-preflight.mjs'
@@ -27,7 +28,8 @@ const sample = ready => [{
 async function checkout(t) {
   const root=await mkdtemp(join(tmpdir(),'bpf qa bootstrap '))
   t.after(()=>rm(root,{recursive:true,force:true}))
-  await cp(join(repositoryRoot,'supabase','migrations'),join(root,'supabase','migrations'),{recursive:true})
+  await mkdir(join(root,'supabase','migrations'),{recursive:true})
+  for(const filename of Object.keys(historicalManifest.migrations)) await cp(join(repositoryRoot,'supabase','migrations',filename),join(root,'supabase','migrations',filename))
   await mkdir(join(root,'supabase','.temp'),{recursive:true})
   await writeFile(join(root,'supabase','.temp','project-ref'),officialProjectRef)
   await mkdir(join(root,'scripts','sql'),{recursive:true})

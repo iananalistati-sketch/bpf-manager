@@ -14,6 +14,7 @@
     "test:tooling": "node --test scripts/*.test.mjs",
     "supabase:apply:documentos": "node scripts/supabase-apply-documentos.mjs",
     "supabase:prepare:qa": "node scripts/supabase-prepare-qa.mjs",
+    "supabase:setup:qa:secondary": "node scripts/supabase-setup-secondary-qa.mjs",
     "supabase:diagnose:qa": "node scripts/supabase-diagnose-qa.mjs",
     "supabase:preflight": "node scripts/supabase-preflight.mjs",
     "test:integration": "node scripts/test-supabase-integration.mjs",

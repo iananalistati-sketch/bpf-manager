@@ -1,4 +1,41 @@
-# Empresa exclusiva de teste — Documentos e Administração
+# Empresa TESTE — Documentos e Administração
+
+> Procedimento atual: **QA secundário**, descrito a seguir. O procedimento v1 abaixo permanece como histórico da conta dedicada; ele não deve ser usado para uma conta que já tem empresa.
+
+## QA secundário — 03/11/2026
+
+O responsável confirmou o uso do login original, que já possui empresa, unidade, memberships e perfis legados. A migration adicional `20261029160000_tenant_administration.sql` permite administrar a empresa selecionada com autorização canônica no backend. As 31 migrations aplicadas remotamente permanecem imutáveis.
+
+O novo fluxo cria **BPF TESTE** como segundo vínculo da mesma identidade. Não muda `usuarios.empresa_id`, `usuarios.unidade_id`, status global, perfis legados ou vínculos anteriores. Cria somente empresa/unidade/perfil locais, membership owner e atribuição canônica; todas as permissões existentes são copiadas para o perfil local no momento da criação. Plano Business com limites configurados, trial real de 14 dias, referências de pagamento nulas e onboarding não iniciado. Não concede permissões futuras nem simula contratação.
+
+Após os gates internos e o checkpoint local verde, no computador já vinculado ao projeto oficial:
+
+```powershell
+git pull --ff-only origin feature/supabase-auth
+npm.cmd ci
+if ($LASTEXITCODE -ne 0) { throw 'Instalação falhou; não aplicar migrações.' }
+npm.cmd run validate:local
+if ($LASTEXITCODE -ne 0) { throw 'Validação falhou; não aplicar migrações.' }
+$env:BPF_QA_EMAIL = 'email-original-da-conta@example.com'
+npm.cmd run supabase:setup:qa:secondary
+```
+
+Usar o e-mail original informado pelo usuário, sem acrescentar alias. A senha PostgreSQL é solicitada de forma oculta; não é a senha da aplicação. O helper exige login administrativo já existente do CLI, vínculo oficial, CLI fixa 2.121.0 e hashes das exatas 32 migrations/SQLs operacionais no manifesto secundário. O e-mail segue validado em hex e SQL por stdin; senha apenas no ambiente do subprocesso com expurgo de saída. Não cria conta Auth nem altera senha ou confirmação.
+
+Com 31 migrations alinhadas, aplica somente a 32; com 32, não repete push. Verifica 11 checks estruturais, incluindo os oito documentais, owners/ACLs de 16 funções administrativas públicas/privadas, role sem escrita global/legada inclusive grants por coluna e RLS. Isso não comprova corpos remotos de funções, concorrência real ou smoke PostgREST. Antes de qualquer escrita o conjunto local é revalidado. Erros e respostas perdidas preservam o exit code e são seguidos de inspeção; não há retry automático, repair ou include-all. Se o push falhar, a criação QA não começa nesta chamada.
+
+O bootstrap é um único DO como postgres e usa marcador separado `bpf:qa-secondary:v1`. Exige identidade confirmada/habilitada e principal ativo. Obtém locks, captura fingerprint da identidade e vínculos anteriores, cria o ambiente e compara a preservação antes de gravar auditoria `workspace.qa_secundario_preparado`. Falha integralmente se a preservação ou auditoria falhar. Um marcador existente não restaura permissões nem renova o prazo; a inspeção bloqueia divergência ou expiração.
+
+Resultado esperado: `QA_SECUNDARIO_PRONTO`, ID da TESTE e prazo do trial. Entrar com o login original, selecionar **BPF TESTE** e concluir o formulário real de onboarding. O trial vencido permite leitura e bloqueia escrita. Testar Configurações e Documentos nesse tenant; não remover os vínculos principais. A execução remota deste procedimento ainda não foi realizada pelo agente.
+
+A leitura administrativa e as mutations passam empresa explícita e validam JWT, identidade, membership, perfil e permissão canônicos. Os wrappers antigos continuam restritos à empresa principal e seguem a mesma revogação; o convite autenticado antigo foi retirado, permanecendo o canal server-only da Edge. Mudanças administrativas afetam o vínculo empresarial, nunca o status global da pessoa. Ver contrato em `docs/arquitetura/ESTADO_BANCO_ESPERADO.md`.
+
+Validação local em 03/11/2026: `validate:local` concluído com exit code 0, 68 testes de tooling, replay das 31 migrations/17 suites históricas, aplicação da 32 com matriz adversarial/QA secundário e nove suites compatíveis repetidas no estado final, TypeScript/build, ESLint e 54 testes E2E sem skipped. Os cinco E2E novos distinguem empresa principal A de ativa B, negam fallback em RPC ausente, conferem payloads das mutations e descartam respostas atrasadas de leitura/escrita após troca/desmontagem. A matriz SQL verifica todas as escritas com permissão removida e rollback integral em falha de auditoria, convite server-only, oito wrappers públicos/privados, quota e drift de ACL inclusive grants por coluna. E2E usa backend interceptado; nenhum bootstrap ou deploy remoto foi executado pelo agente.
+
+Gates 08, 09 e 07 desta atualização: **APROVADOS**, sem bloqueadores; Agente 10: **APROVADO** no escopo SaaS. Checkpoint do usuário e implantação remota permanecem pendentes.
+
+## Histórico: QA v1 para conta sem vínculos
+
 
 ## Escopo autorizado
 
@@ -75,7 +112,7 @@ A resposta tem exatamente 13 contagens e três booleanos; o formatter só imprim
 
 O caminho `supabase:prepare:qa` agora chama esse mesmo diagnóstico automaticamente ao bloquear, reutilizando a sessão sem pedir senha novamente. Falha diagnóstica mantém `QA_BLOQUEADO`, exit code 1 e ausência de escrita. Para marcador da própria conta, também mostra os nomes dos checks de inspeção pendentes; não recomenda recriar nem reparar o ambiente automaticamente.
 
-Um vínculo prévio exige uma conta de teste exclusiva, não a remoção ou transferência da conta existente. Outros impedimentos devem ser tratados conforme a causa efetivamente observada. O email informado pelo usuário permanece somente na conversa e na variável local, sem novo padrão embutido no repositório.
+No procedimento v1, um vínculo prévio impede provisionamento; o novo fluxo secundário acima atende a conta existente sem remover ou transferir seus vínculos. Outros impedimentos devem ser tratados conforme a causa efetivamente observada. O email informado pelo usuário permanece somente na conversa e na variável local, sem novo padrão embutido no repositório.
 
 QA desta correção: 54 testes de tooling e 31 migrations/17 suítes SQL, incluindo os cenários QA e o diagnóstico contra contas ausentes/ambíguas/não confirmadas/banidas/excluídas/inativas, cadastro ausente e vínculos prévios. Marcador de outra conta ou com UUID inválido é diagnosticado sem casts de UUID. Nenhuma migration ou SQL de provisionamento/inspeção anterior foi alterado. Causa remota e criação da empresa TESTE continuam pendentes de evidência do computador autenticado.
 

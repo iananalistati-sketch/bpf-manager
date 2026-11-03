@@ -217,3 +217,8 @@ A remoção das estruturas legadas só pode ocorrer após backfill, dupla valida
 
 **Status:** Arquitetura alvo do Marco 1.5 / Fases 1 e 2 em evolução  
 **Última atualização:** 23/09/2026
+
+
+## QA secundário com conta existente — 03/11/2026
+
+O fluxo administrativo de QA pode criar TESTE como outro membership de uma identidade ativa/confirmada que já possui empresa principal. Usa namespace idempotente separado do trial self-service e do QA v1, perfil local com snapshot das permissões atuais, Business configurado e trial real de 14 dias. Preserva identidade, empresa principal, vínculos e perfis anteriores. Onboarding permanece real e expiração bloqueia escrita. Reexecução não renova trial nem reatribui acessos revogados. Procedimento e limites em `docs/planos/EMPRESA-TESTE-DOCUMENTOS.md`.

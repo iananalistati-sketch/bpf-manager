@@ -15,6 +15,11 @@ const migrations = (await readdir(migrationsDir, { withFileTypes: true }))
   .map(entry => `supabase/migrations/${entry.name}`)
   .sort()
 
+// Preserve the 31-migration milestone's upgrade/legacy contracts, then test
+// the canonical tenant administration upgrade and final-state regressions.
+const historicalMigrations = migrations.filter(path => path.split('/').at(-1) <= '20261015203000_document_control_integrity.sql')
+const laterMigrations = migrations.filter(path => !historicalMigrations.includes(path))
+
 const testSuites = (await readdir(testsDir, { withFileTypes: true }))
   .filter(entry => entry.isFile() && entry.name.endsWith('.sql'))
   .map(entry => `supabase/tests/${entry.name}`)
@@ -51,7 +56,7 @@ try {
   if (!rejected) throw new Error('Preflight accepted incompatible legacy data')
   console.log('PASS: preflight rejects incompatible legacy data')
 
-  for (const path of migrations) {
+  for (const path of historicalMigrations) {
     if (path === membershipMigration) {
       await db.exec(`
         INSERT INTO public.empresas(id, razao_social) VALUES
@@ -145,7 +150,7 @@ try {
   // Replay the exact read-only hosted inspection against the reconstructed final schema.
   await db.exec(`CREATE SCHEMA supabase_migrations;
     CREATE TABLE supabase_migrations.schema_migrations(version text PRIMARY KEY)`)
-  for (const path of migrations) {
+  for (const path of historicalMigrations) {
     await db.query('INSERT INTO supabase_migrations.schema_migrations(version) VALUES ($1)', [path.split('/').at(-1).slice(0, 14)])
   }
   const verificationSql = await read('scripts/sql/verify-documentos-deploy.sql')
@@ -181,6 +186,22 @@ try {
   }
 
   await testQaWorkspace(db)
+
+  for (const path of laterMigrations) {
+    await db.exec(`BEGIN;\n${await read(path)}\nCOMMIT;`)
+    console.log(`PASS: applied canonical upgrade ${path.split('/').at(-1)}`)
+  }
+  if(laterMigrations.length) {
+    const { testTenantAdministration } = await import('./test-tenant-administration-db.mjs')
+    await testTenantAdministration(db)
+    for (const name of ['document_control_foundation','subscription_lifecycle_foundation',
+      'subscription_checkout_intents','plan_entitlements_foundation','admin_invite_membership_bridge',
+      'trial_provisioning_foundation','owner_onboarding_command','workspace_commercial_context','tenant_context_contract']) {
+      console.log(`RUN final32: ${name}.sql`)
+      await db.exec(await read(`supabase/tests/${name}.sql`))
+    }
+    console.log('PASS: nine compatible historical suites also pass on the final canonical schema')
+  }
 
   const { rows: users } = await db.query('SELECT count(*)::int AS count FROM public.usuarios')
   if (users[0].count !== 0) throw new Error('Test fixtures were not rolled back')

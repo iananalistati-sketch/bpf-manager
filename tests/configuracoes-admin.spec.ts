@@ -32,11 +32,17 @@ async function setup(page: Page) {
       { plano_id: '80000000-0000-0000-0000-000000000001', plano_codigo: 'basic', plano_nome: 'Basic', plano_ativo: true, origem: 'manual', chave: 'usuarios_ativos.max', tipo: 'inteiro', valor_booleano: null, valor_inteiro: 10, valor_texto: null },
       { plano_id: '80000000-0000-0000-0000-000000000001', plano_codigo: 'basic', plano_nome: 'Basic', plano_ativo: true, origem: 'manual', chave: 'unidades.max', tipo: 'inteiro', valor_booleano: null, valor_inteiro: 1, valor_texto: null },
     ], headers: { 'content-type': 'application/json' } })
-    if (url.pathname.includes('/rpc/')) return route.fulfill({ status: 200, json: null, headers: { 'content-type': 'application/json' } })
-    const table = url.pathname.split('/').pop() ?? ''
+    const rpc=url.pathname.split('/').pop()??''
+    const body=request.postDataJSON() as {p_recurso?:string;p_offset?:number}|null
+    const isReader=rpc==='admin_contexto_ler'
+    if(rpc==='meu_contexto_empresa')return route.fulfill({status:200,json:[context]})
+    if(['meus_vinculos','meu_workspace_comercial'].includes(rpc))return route.fulfill({status:200,json:[]})
+    if(rpc==='admin_perfil_tenant')return route.fulfill({status:200,json:profileId})
+    if(url.pathname.includes('/rpc/')&&!isReader)return route.fulfill({status:404,json:{code:'PGRST202'}})
+    const table = isReader?body?.p_recurso??'':rpc
     const data: Record<string, unknown[]> = {
       v_meu_contexto: [context],
-      usuarios: [{ id: userId, nome: 'Admin QA', email: 'admin@example.test', empresa_id: companyId, unidade_id: unitId, status: 'ativo', ativo: true, created_at: '2026-09-18T12:00:00Z' }],
+      usuarios: [{ id: userId, membership_id:'91000000-0000-0000-0000-000000000001',identidade_ativa:true,identidade_status:'ativo', nome: 'Admin QA', email: 'admin@example.test', empresa_id: companyId, unidade_id: unitId, status: 'ativo', ativo: true, created_at: '2026-09-18T12:00:00Z' }],
       empresas: [{ id: companyId, nome_fantasia: 'Empresa QA', razao_social: 'Empresa QA Ltda', cnpj: '00.000.000/0001-00', ativo: true }],
       unidades: [{ id: unitId, empresa_id: companyId, nome: 'Matriz', codigo: 'MTZ', ativo: true }],
       setores: [{ id: sectorId, unidade_id: unitId, nome: 'Qualidade', codigo: 'QLD', ativo: true }],
@@ -45,6 +51,7 @@ async function setup(page: Page) {
         { id: '60000000-0000-0000-0000-000000000001', codigo: 'documentos.visualizar', modulo: 'documentos', acao: 'visualizar', descricao: 'Visualizar documentos' },
         { id: '60000000-0000-0000-0000-000000000002', codigo: 'auditoria.visualizar', modulo: 'auditoria', acao: 'visualizar', descricao: 'Visualizar auditoria' },
       ],
+      atores_auditoria:[{id:userId,nome:'Admin QA',email:'admin@example.test'}],
       usuario_perfis: [{ usuario_id: userId, perfil_id: profileId }],
       perfil_permissoes: [{ perfil_id: profileId, permissao_id: '60000000-0000-0000-0000-000000000002' }],
       auditoria_eventos: [{ id: '70000000-0000-0000-0000-000000000001', empresa_id: companyId, unidade_id: unitId, ator_id: userId,
@@ -52,7 +59,7 @@ async function setup(page: Page) {
         justificativa: 'QA reativação', contexto: { origem: 'rpc' }, created_at: '2026-09-18T12:10:00Z' }],
     }
     const rows = data[table] ?? []
-    return route.fulfill({ status: 200, json: rows, headers: { 'content-type': 'application/json', 'content-range': `0-${Math.max(rows.length - 1, 0)}/${rows.length}`, 'access-control-expose-headers': 'content-range' } })
+    return route.fulfill({ status: 200, json: isReader?{data:rows.slice(body?.p_offset??0,(body?.p_offset??0)+500),count:rows.length}:rows, headers: { 'content-type': 'application/json', 'content-range': `0-${Math.max(rows.length - 1, 0)}/${rows.length}`, 'access-control-expose-headers': 'content-range' } })
   })
   return requests
 }
@@ -93,7 +100,7 @@ test('perfil customizado usa RPC e perfil de sistema permanece somente leitura',
   await dialog.getByLabel('Justificativa').fill('Perfil específico da unidade')
   await dialog.getByRole('button', { name: 'Criar perfil' }).click()
   await expect(dialog).toHaveCount(0)
-  expect(requests.some(item => item.path.endsWith('/rest/v1/rpc/admin_perfil_criar') && item.method === 'POST')).toBe(true)
+  expect(requests.some(item => item.path.endsWith('/rest/v1/rpc/admin_perfil_tenant') && item.method === 'POST')).toBe(true)
   await page.getByRole('button', { name: 'Ver permissões de Administrador' }).click()
   await expect(page.getByRole('button', { name: 'Salvar permissões' })).toBeDisabled()
 })
@@ -106,6 +113,6 @@ test('estrutura e auditoria aparecem somente com permissões e carregam dados da
   await page.getByRole('button', { name: 'Auditoria', exact: true }).click()
   await expect(page.getByRole('heading', { name: 'Auditoria', exact: true })).toBeVisible()
   await expect(page.getByText('usuario.status_alterado')).toBeVisible()
-  expect(requests.some(item => item.path.endsWith('/rest/v1/setores'))).toBe(true)
-  expect(requests.some(item => item.path.endsWith('/rest/v1/auditoria_eventos'))).toBe(true)
+  expect(requests.some(item => item.path.endsWith('/rpc/admin_contexto_ler') && JSON.parse(item.body??'{}').p_recurso==='setores')).toBe(true)
+  expect(requests.some(item => item.path.endsWith('/rpc/admin_contexto_ler') && JSON.parse(item.body??'{}').p_recurso==='auditoria_eventos')).toBe(true)
 })

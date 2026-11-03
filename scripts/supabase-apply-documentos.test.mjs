@@ -14,7 +14,8 @@ const logger = () => { let text = ''; return { write: value => { text += value }
 async function checkout(t) {
   const root = await mkdtemp(join(tmpdir(), 'bpf apply test '))
   t.after(() => rm(root, { recursive: true, force: true }))
-  await cp(join(repositoryRoot, 'supabase', 'migrations'), join(root, 'supabase', 'migrations'), { recursive: true })
+  await mkdir(join(root,'supabase','migrations'),{recursive:true})
+  for(const filename of Object.keys(manifest.migrations)) await cp(join(repositoryRoot,'supabase','migrations',filename),join(root,'supabase','migrations',filename))
   await mkdir(join(root, 'supabase', '.temp'), { recursive: true })
   await writeFile(join(root, 'supabase', '.temp', 'project-ref'), officialProjectRef)
   await mkdir(join(root, 'scripts', 'sql'), { recursive: true })
