@@ -1,75 +1,40 @@
-# React + TypeScript + Vite
+# BPF Manager
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Plataforma web para gestão de **Boas Práticas de Fabricação (BPF)**, inicialmente voltada para indústrias de alimentação animal.
 
-Currently, two official plugins are available:
+## Referência obrigatória do projeto
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+Antes de desenvolver novos módulos, fluxos, permissões, estruturas de dados ou integrações, consulte:
 
-## React Compiler
+**[`docs/REFERENCIA_PROJETO.md`](docs/REFERENCIA_PROJETO.md)**
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+Esse documento registra o objetivo geral da aplicação, visão do produto, módulos previstos, arquitetura, princípios de segurança, estrutura organizacional, regras de autorização, trilha de auditoria e critérios que devem orientar novas implementações.
 
-## Expanding the ESLint configuration
+Se uma implementação futura entrar em conflito com essa referência, a divergência deve ser discutida antes de ser incorporada definitivamente ao projeto.
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+## Stack atual
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+- React
+- TypeScript
+- Vite
+- React Router
+- Supabase PostgreSQL
+- Supabase Auth
+- Supabase RLS
+- GitHub
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+## Desenvolvimento local
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-
+```bash
+npm install
+npm run dev
 ```
 
-You can also install [eslint-plugin-react-x](https://npmx.dev/package/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://npmx.dev/package/eslint-plugin-react-dom) for React-specific lint rules:
+No Windows PowerShell deste projeto, caso a execução de `npm.ps1` esteja bloqueada, utilize:
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-
+```powershell
+npm.cmd install
+npm.cmd run dev
 ```
+
+As variáveis locais do Supabase devem ficar em `.env.local`. Use `.env.example` apenas como referência e nunca versione credenciais ou arquivos locais de ambiente.
