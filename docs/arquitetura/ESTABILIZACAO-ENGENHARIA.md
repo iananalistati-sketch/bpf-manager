@@ -1,5 +1,15 @@
 # Fase 0 — Estabilização da Engenharia
 
+## Correção de dependências — 03/11/2026
+
+O checkpoint Windows reportou alertas após `npm ci`. A auditoria reproduzida no mesmo lockfile encontrou alertas nas ferramentas de desenvolvimento; `npm audit --omit=dev` não encontrou vulnerabilidades de produção. O catálogo de advisories pode mudar a contagem entre execuções.
+
+A correção eleva o mínimo de Vite para `^8.3.5` e atualiza o lockfile para versões corrigidas de suas dependências, `zod`, `brace-expansion` e `source-map-js`. Não utiliza `npm audit fix --force` e não altera código funcional, contratos SQL ou migrations.
+
+`minimatch` 10.2.6 ainda é afetado por [GHSA-g3hv-75wg-m249](https://github.com/advisories/GHSA-g3hv-75wg-m249). Como os consumidores de lint ainda exigem essa linha, três overrides temporários fixam `minimatch` 11.0.4 somente sob `eslint`, `@eslint/config-array` e `@typescript-eslint/typescript-estree`. Não há override global para futuros consumidores. A versão 11 remove APIs públicas; os três consumidores atuais foram inspecionados e usam apenas `Minimatch.match` e `minimatch`, preservadas. Comparação de 16.632 combinações com arquivos/padrões do projeto, travessia parcial e opções Windows não encontrou divergências. Remover os overrides quando esses consumidores aceitarem uma versão corrigida oficialmente.
+
+Validação da correção: `npm ci` com o lockfile novo passou, `npm audit` retornou zero vulnerabilidades incluindo desenvolvimento, e `validate:local` terminou com exit code 0: 68 testes de tooling, banco com 32 migrations, build, lint e 54 E2E, sem skipped. Um teste negativo pela API do ESLint confirmou que código inválido ainda gera erro e que regras/ignores continuam aplicados. Gates 09 e 07: APROVADOS, sem bloqueadores. A ausência de alertas corresponde ao catálogo consultado nesta data. O runtime validado continua Node 24; execução Windows nativa depende do checkpoint do usuário.
+
 ## Objetivo
 
 Interromper o ciclo de correção reativa no ambiente oficial e criar uma esteira que encontre falhas previsíveis antes do checkpoint manual do usuário.
