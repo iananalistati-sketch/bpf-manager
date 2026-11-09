@@ -2,6 +2,27 @@
 
 > Procedimento atual: **QA secundário**, descrito a seguir. O procedimento v1 abaixo permanece como histórico da conta dedicada; ele não deve ser usado para uma conta que já tem empresa.
 
+> **Aplicação da migração 32 bloqueada após a tentativa remota.** Não repetir `supabase:setup:qa:secondary` até concluir o diagnóstico e revisar a correção. A aprovação local registrada abaixo é histórica e não confirma implantação remota.
+
+## Diagnóstico do incidente — 09/11/2026
+
+O usuário reportou erro `42704` no comando 118 da migration32: `empresas_select_empresa` não existe em `public.empresas`. Os quatro nomes usados pelos ALTER POLICY foram definidos somente no fixture pré-migrations; a cadeia versionada de 1 a 31 não os cria. A revisão anterior deixou passar essa dependência do baseline. O helper não iniciou a criação QA nessa chamada e reportou `ADMIN_NAO_CONFIRMADO`. O histórico de 31 versões, isoladamente, não comprova rollback ou ausência de efeitos da tentativa.
+
+O novo comando `supabase:diagnose:administracao` usa o vínculo oficial, o perfil `supabase`, CLI2.121.0 e a sessão de senha PostgreSQL oculta já existentes. Executa exatamente um SELECT fixo enviado por stdin à Management API, com SHA256 separado e normalização exclusiva de CRLF. Não depende dos quatro nomes de policies e não lê registros Auth/aplicação, senhas, `pg_authid` ou statements de migrations. Coleta versões completas do ledger, RLS/owner de tabelas, policies com predicados e roles, grants de tabela/coluna, flags e memberships de roles, metadados/hashes de funções novas e antigas e hash da view de contexto. Configurações de funções são limitadas a search_path, sem dump de GUCs arbitrárias.
+
+Após atualizar o código, executar no computador autenticado:
+
+```powershell
+git pull --ff-only origin feature/supabase-auth
+npm.cmd run supabase:diagnose:administracao
+```
+
+Enviar a saída para revisão. O parser exige formato exato e limitado; stdout/stderr brutos do CLI são suprimidos em falhas e a saída final passa por expurgo da senha. `DIAGNOSTICO_ADMIN_CONCLUIDO` confirma somente coleta de metadados: não autoriza retry, repair, push ou criação QA. Se a consulta falhar, permanece bloqueado e não há repetição automática.
+
+A correção será definida após observar esse estado. As 31 migrations aplicadas permanecem imutáveis e a 32 também não foi alterada nesta entrega diagnóstica. A alternativa local avaliada usa guards SELECT restritivos com nomes próprios para intersectar as permissivas existentes, evitando dependência dos nomes e bypass por OR. Essa alternativa não foi liberada remotamente. Antes de revisar qualquer migration pendente é necessário conferir ledger e vestígios da tentativa, incluindo funções/roles/policies/grants e compatibilidade legada.
+
+Validação em 09/11/2026: `validate:local` terminou com exit code 0, 75 testes de tooling, banco, build, lint e 54 E2E sem skipped. O diagnóstico foi executado em transação READ ONLY, com policies ausentes/renomeadas e vestígios da migração 32 sem mudança do ledger de 31 versões; os cinco helpers legados foram conferidos e GUCs fora de search_path foram omitidos. Respostas malformadas/CLI com erro não vazam saída bruta nem provocam retry; a senha é expurgada inclusive de metadados válidos. Agentes 08, 09 e 07: APROVADO somente para diagnóstico; escrita remota permanece bloqueada.
+
 ## QA secundário — 03/11/2026
 
 O responsável confirmou o uso do login original, que já possui empresa, unidade, memberships e perfis legados. A migration adicional `20261029160000_tenant_administration.sql` permite administrar a empresa selecionada com autorização canônica no backend. As 31 migrations aplicadas remotamente permanecem imutáveis.

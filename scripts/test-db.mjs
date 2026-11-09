@@ -158,6 +158,8 @@ try {
   if (verified.length !== 1 || checkNames.some(name => verified[0][name] !== true)) {
     throw new Error(`Hosted metadata inspection disagrees with final schema: ${JSON.stringify(verified)}`)
   }
+  const { testAdministrationDiagnosis } = await import('./test-administration-diagnosis-db.mjs')
+  await testAdministrationDiagnosis(db)
   for (const [mutation, check] of [
     ['GRANT SELECT(titulo) ON public.documentos TO authenticated', 'tabelas_fechadas'],
     ['GRANT EXECUTE ON FUNCTION private.tenant_tem_permissao(uuid,text) TO PUBLIC', 'helpers_fechados'],
