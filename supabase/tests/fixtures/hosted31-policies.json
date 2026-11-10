@@ -1,0 +1,813 @@
+{
+  "tables": [
+    "auditoria_eventos",
+    "empresa_assinaturas",
+    "empresa_onboarding",
+    "empresa_planos",
+    "empresas",
+    "perfil_permissoes",
+    "perfis",
+    "permissoes",
+    "saas_provisionamentos",
+    "setores",
+    "unidades",
+    "usuario_empresa_perfis",
+    "usuario_empresas",
+    "usuario_perfis",
+    "usuarios"
+  ],
+  "policies": [
+    {
+      "cmd": "INSERT",
+      "permissive": "PERMISSIVE",
+      "policyname": "auditoria_eventos_admin_writer_insert",
+      "qual": null,
+      "roles": [
+        "bpf_admin_writer"
+      ],
+      "schemaname": "public",
+      "tablename": "auditoria_eventos",
+      "with_check": "((ator_id = (NULLIF(current_setting('request.jwt.claim.sub'::text, true), ''::text))::uuid) AND (empresa_id IN ( SELECT t.x\n   FROM unnest(ARRAY[private.empresa_leitura_usuarios(), private.empresa_gestao_perfis(), private.empresa_convite_usuarios(), private.empresa_estrutura_admin()]) t(x)\n  WHERE (t.x IS NOT NULL))))"
+    },
+    {
+      "cmd": "INSERT",
+      "permissive": "PERMISSIVE",
+      "policyname": "auditoria_eventos_admin_writer_tenant_insert",
+      "qual": null,
+      "roles": [
+        "bpf_admin_writer"
+      ],
+      "schemaname": "public",
+      "tablename": "auditoria_eventos",
+      "with_check": "((empresa_id = (NULLIF(current_setting('bpf.active_empresa'::text, true), ''::text))::uuid) AND (ator_id = (NULLIF(current_setting('request.jwt.claim.sub'::text, true), ''::text))::uuid))"
+    },
+    {
+      "cmd": "SELECT",
+      "permissive": "PERMISSIVE",
+      "policyname": "auditoria_eventos_select_empresa",
+      "qual": "(empresa_id = ( SELECT private.empresa_leitura_auditoria() AS empresa_leitura_auditoria))",
+      "roles": [
+        "authenticated"
+      ],
+      "schemaname": "public",
+      "tablename": "auditoria_eventos",
+      "with_check": null
+    },
+    {
+      "cmd": "SELECT",
+      "permissive": "PERMISSIVE",
+      "policyname": "empresa_planos_entitlement_reader_vinculos",
+      "qual": "(EXISTS ( SELECT 1\n   FROM (usuario_empresas ue\n     JOIN usuarios u ON ((u.id = ue.usuario_id)))\n  WHERE ((ue.usuario_id = private.request_jwt_subject()) AND (ue.empresa_id = empresa_planos.empresa_id) AND (ue.status = 'ativo'::text) AND u.ativo AND (u.status = 'ativo'::text))))",
+      "roles": [
+        "bpf_entitlement_reader"
+      ],
+      "schemaname": "public",
+      "tablename": "empresa_planos",
+      "with_check": null
+    },
+    {
+      "cmd": "SELECT",
+      "permissive": "PERMISSIVE",
+      "policyname": "empresa_planos_plan_enforcer_select",
+      "qual": "true",
+      "roles": [
+        "bpf_plan_enforcer"
+      ],
+      "schemaname": "public",
+      "tablename": "empresa_planos",
+      "with_check": null
+    },
+    {
+      "cmd": "SELECT",
+      "permissive": "PERMISSIVE",
+      "policyname": "empresas_admin_writer_select",
+      "qual": "(id = ( SELECT private.empresa_estrutura_admin() AS empresa_estrutura_admin))",
+      "roles": [
+        "bpf_admin_writer"
+      ],
+      "schemaname": "public",
+      "tablename": "empresas",
+      "with_check": null
+    },
+    {
+      "cmd": "UPDATE",
+      "permissive": "PERMISSIVE",
+      "policyname": "empresas_admin_writer_update",
+      "qual": "(id = ( SELECT private.empresa_estrutura_admin() AS empresa_estrutura_admin))",
+      "roles": [
+        "bpf_admin_writer"
+      ],
+      "schemaname": "public",
+      "tablename": "empresas",
+      "with_check": "(id = ( SELECT private.empresa_estrutura_admin() AS empresa_estrutura_admin))"
+    },
+    {
+      "cmd": "SELECT",
+      "permissive": "PERMISSIVE",
+      "policyname": "empresas_select_da_empresa",
+      "qual": "(EXISTS ( SELECT 1\n   FROM usuarios u\n  WHERE ((u.id = ( SELECT auth.uid() AS uid)) AND (u.empresa_id = empresas.id) AND (u.ativo = true) AND (u.status = 'ativo'::text))))",
+      "roles": [
+        "authenticated"
+      ],
+      "schemaname": "public",
+      "tablename": "empresas",
+      "with_check": null
+    },
+    {
+      "cmd": "SELECT",
+      "permissive": "PERMISSIVE",
+      "policyname": "empresas_tenant_reader_vinculos",
+      "qual": "(EXISTS ( SELECT 1\n   FROM usuario_empresas ue\n  WHERE ((ue.empresa_id = empresas.id) AND (ue.usuario_id = private.request_jwt_subject()) AND (ue.status = 'ativo'::text))))",
+      "roles": [
+        "bpf_tenant_reader"
+      ],
+      "schemaname": "public",
+      "tablename": "empresas",
+      "with_check": null
+    },
+    {
+      "cmd": "DELETE",
+      "permissive": "PERMISSIVE",
+      "policyname": "perfil_permissoes_admin_writer_delete",
+      "qual": "(EXISTS ( SELECT 1\n   FROM perfis p\n  WHERE ((p.id = perfil_permissoes.perfil_id) AND (p.empresa_id = ( SELECT private.empresa_gestao_perfis() AS empresa_gestao_perfis)) AND (NOT p.is_system))))",
+      "roles": [
+        "bpf_admin_writer"
+      ],
+      "schemaname": "public",
+      "tablename": "perfil_permissoes",
+      "with_check": null
+    },
+    {
+      "cmd": "INSERT",
+      "permissive": "PERMISSIVE",
+      "policyname": "perfil_permissoes_admin_writer_insert",
+      "qual": null,
+      "roles": [
+        "bpf_admin_writer"
+      ],
+      "schemaname": "public",
+      "tablename": "perfil_permissoes",
+      "with_check": "(EXISTS ( SELECT 1\n   FROM perfis p\n  WHERE ((p.id = perfil_permissoes.perfil_id) AND (p.empresa_id = ( SELECT private.empresa_gestao_perfis() AS empresa_gestao_perfis)) AND (NOT p.is_system))))"
+    },
+    {
+      "cmd": "SELECT",
+      "permissive": "PERMISSIVE",
+      "policyname": "perfil_permissoes_admin_writer_select",
+      "qual": "(EXISTS ( SELECT 1\n   FROM perfis p\n  WHERE (p.id = perfil_permissoes.perfil_id)))",
+      "roles": [
+        "bpf_admin_writer"
+      ],
+      "schemaname": "public",
+      "tablename": "perfil_permissoes",
+      "with_check": null
+    },
+    {
+      "cmd": "SELECT",
+      "permissive": "PERMISSIVE",
+      "policyname": "perfil_permissoes_authz_reader_escopo",
+      "qual": "(EXISTS ( SELECT 1\n   FROM perfis p\n  WHERE (p.id = perfil_permissoes.perfil_id)))",
+      "roles": [
+        "bpf_authz_reader"
+      ],
+      "schemaname": "public",
+      "tablename": "perfil_permissoes",
+      "with_check": null
+    },
+    {
+      "cmd": "SELECT",
+      "permissive": "PERMISSIVE",
+      "policyname": "perfil_permissoes_select_visiveis",
+      "qual": "(EXISTS ( SELECT 1\n   FROM perfis p\n  WHERE ((p.id = perfil_permissoes.perfil_id) AND (((p.empresa_id IS NULL) AND (p.is_system = true)) OR (EXISTS ( SELECT 1\n           FROM usuarios u\n          WHERE ((u.id = ( SELECT auth.uid() AS uid)) AND (u.empresa_id = p.empresa_id) AND (u.ativo = true) AND (u.status = 'ativo'::text))))))))",
+      "roles": [
+        "authenticated"
+      ],
+      "schemaname": "public",
+      "tablename": "perfil_permissoes",
+      "with_check": null
+    },
+    {
+      "cmd": "SELECT",
+      "permissive": "PERMISSIVE",
+      "policyname": "perfil_permissoes_tenant_reader_escopo",
+      "qual": "(EXISTS ( SELECT 1\n   FROM perfis p\n  WHERE (p.id = perfil_permissoes.perfil_id)))",
+      "roles": [
+        "bpf_tenant_reader"
+      ],
+      "schemaname": "public",
+      "tablename": "perfil_permissoes",
+      "with_check": null
+    },
+    {
+      "cmd": "INSERT",
+      "permissive": "PERMISSIVE",
+      "policyname": "perfis_admin_writer_insert",
+      "qual": null,
+      "roles": [
+        "bpf_admin_writer"
+      ],
+      "schemaname": "public",
+      "tablename": "perfis",
+      "with_check": "((empresa_id = ( SELECT private.empresa_gestao_perfis() AS empresa_gestao_perfis)) AND (NOT is_system))"
+    },
+    {
+      "cmd": "SELECT",
+      "permissive": "PERMISSIVE",
+      "policyname": "perfis_admin_writer_select",
+      "qual": "(((empresa_id IS NULL) AND is_system) OR (empresa_id = ( SELECT private.empresa_leitura_usuarios() AS empresa_leitura_usuarios)))",
+      "roles": [
+        "bpf_admin_writer"
+      ],
+      "schemaname": "public",
+      "tablename": "perfis",
+      "with_check": null
+    },
+    {
+      "cmd": "SELECT",
+      "permissive": "PERMISSIVE",
+      "policyname": "perfis_admin_writer_tenant_select",
+      "qual": "(((empresa_id IS NULL) AND is_system) OR (empresa_id = (NULLIF(current_setting('bpf.active_empresa'::text, true), ''::text))::uuid))",
+      "roles": [
+        "bpf_admin_writer"
+      ],
+      "schemaname": "public",
+      "tablename": "perfis",
+      "with_check": null
+    },
+    {
+      "cmd": "UPDATE",
+      "permissive": "PERMISSIVE",
+      "policyname": "perfis_admin_writer_update",
+      "qual": "((empresa_id = ( SELECT private.empresa_gestao_perfis() AS empresa_gestao_perfis)) AND (NOT is_system))",
+      "roles": [
+        "bpf_admin_writer"
+      ],
+      "schemaname": "public",
+      "tablename": "perfis",
+      "with_check": "((empresa_id = ( SELECT private.empresa_gestao_perfis() AS empresa_gestao_perfis)) AND (NOT is_system))"
+    },
+    {
+      "cmd": "SELECT",
+      "permissive": "PERMISSIVE",
+      "policyname": "perfis_authz_reader_escopo",
+      "qual": "(ativo AND (((empresa_id IS NULL) AND is_system) OR (empresa_id = ( SELECT u.empresa_id\n   FROM usuarios u\n  WHERE ((u.id = ( SELECT auth.uid() AS uid)) AND u.ativo AND (u.status = 'ativo'::text))))))",
+      "roles": [
+        "bpf_authz_reader"
+      ],
+      "schemaname": "public",
+      "tablename": "perfis",
+      "with_check": null
+    },
+    {
+      "cmd": "SELECT",
+      "permissive": "PERMISSIVE",
+      "policyname": "perfis_select_visiveis",
+      "qual": "(((empresa_id IS NULL) AND (is_system = true)) OR (EXISTS ( SELECT 1\n   FROM usuarios u\n  WHERE ((u.id = ( SELECT auth.uid() AS uid)) AND (u.empresa_id = perfis.empresa_id) AND (u.ativo = true) AND (u.status = 'ativo'::text)))))",
+      "roles": [
+        "authenticated"
+      ],
+      "schemaname": "public",
+      "tablename": "perfis",
+      "with_check": null
+    },
+    {
+      "cmd": "SELECT",
+      "permissive": "PERMISSIVE",
+      "policyname": "perfis_tenant_reader_escopo",
+      "qual": "(ativo AND (((empresa_id IS NULL) AND is_system) OR (EXISTS ( SELECT 1\n   FROM usuario_empresas ue\n  WHERE ((ue.empresa_id = perfis.empresa_id) AND (ue.usuario_id = private.request_jwt_subject()) AND (ue.status = 'ativo'::text))))))",
+      "roles": [
+        "bpf_tenant_reader"
+      ],
+      "schemaname": "public",
+      "tablename": "perfis",
+      "with_check": null
+    },
+    {
+      "cmd": "SELECT",
+      "permissive": "PERMISSIVE",
+      "policyname": "permissoes_admin_writer_select",
+      "qual": "true",
+      "roles": [
+        "bpf_admin_writer"
+      ],
+      "schemaname": "public",
+      "tablename": "permissoes",
+      "with_check": null
+    },
+    {
+      "cmd": "SELECT",
+      "permissive": "PERMISSIVE",
+      "policyname": "permissoes_authz_reader_codigos",
+      "qual": "(codigo = ANY (ARRAY['configuracoes.visualizar'::text, 'configuracoes.gerenciar'::text, 'usuarios.gerenciar'::text, 'usuarios.convidar'::text, 'perfis.gerenciar'::text, 'estrutura.gerenciar'::text, 'auditoria.visualizar'::text]))",
+      "roles": [
+        "bpf_authz_reader"
+      ],
+      "schemaname": "public",
+      "tablename": "permissoes",
+      "with_check": null
+    },
+    {
+      "cmd": "SELECT",
+      "permissive": "PERMISSIVE",
+      "policyname": "permissoes_select_autenticado",
+      "qual": "true",
+      "roles": [
+        "authenticated"
+      ],
+      "schemaname": "public",
+      "tablename": "permissoes",
+      "with_check": null
+    },
+    {
+      "cmd": "SELECT",
+      "permissive": "PERMISSIVE",
+      "policyname": "permissoes_tenant_reader_catalogo",
+      "qual": "true",
+      "roles": [
+        "bpf_tenant_reader"
+      ],
+      "schemaname": "public",
+      "tablename": "permissoes",
+      "with_check": null
+    },
+    {
+      "cmd": "INSERT",
+      "permissive": "PERMISSIVE",
+      "policyname": "setores_admin_writer_insert",
+      "qual": null,
+      "roles": [
+        "bpf_admin_writer"
+      ],
+      "schemaname": "public",
+      "tablename": "setores",
+      "with_check": "(EXISTS ( SELECT 1\n   FROM unidades un\n  WHERE ((un.id = setores.unidade_id) AND (un.empresa_id = ( SELECT private.empresa_estrutura_admin() AS empresa_estrutura_admin)))))"
+    },
+    {
+      "cmd": "SELECT",
+      "permissive": "PERMISSIVE",
+      "policyname": "setores_admin_writer_select",
+      "qual": "(EXISTS ( SELECT 1\n   FROM unidades un\n  WHERE ((un.id = setores.unidade_id) AND (un.empresa_id = ( SELECT private.empresa_estrutura_admin() AS empresa_estrutura_admin)))))",
+      "roles": [
+        "bpf_admin_writer"
+      ],
+      "schemaname": "public",
+      "tablename": "setores",
+      "with_check": null
+    },
+    {
+      "cmd": "UPDATE",
+      "permissive": "PERMISSIVE",
+      "policyname": "setores_admin_writer_update",
+      "qual": "(EXISTS ( SELECT 1\n   FROM unidades un\n  WHERE ((un.id = setores.unidade_id) AND (un.empresa_id = ( SELECT private.empresa_estrutura_admin() AS empresa_estrutura_admin)))))",
+      "roles": [
+        "bpf_admin_writer"
+      ],
+      "schemaname": "public",
+      "tablename": "setores",
+      "with_check": "(EXISTS ( SELECT 1\n   FROM unidades un\n  WHERE ((un.id = setores.unidade_id) AND (un.empresa_id = ( SELECT private.empresa_estrutura_admin() AS empresa_estrutura_admin)))))"
+    },
+    {
+      "cmd": "SELECT",
+      "permissive": "PERMISSIVE",
+      "policyname": "setores_select_da_empresa",
+      "qual": "(EXISTS ( SELECT 1\n   FROM (usuarios u\n     JOIN unidades un ON ((un.id = setores.unidade_id)))\n  WHERE ((u.id = ( SELECT auth.uid() AS uid)) AND (u.empresa_id = un.empresa_id) AND (u.ativo = true) AND (u.status = 'ativo'::text))))",
+      "roles": [
+        "authenticated"
+      ],
+      "schemaname": "public",
+      "tablename": "setores",
+      "with_check": null
+    },
+    {
+      "cmd": "INSERT",
+      "permissive": "PERMISSIVE",
+      "policyname": "unidades_admin_writer_insert",
+      "qual": null,
+      "roles": [
+        "bpf_admin_writer"
+      ],
+      "schemaname": "public",
+      "tablename": "unidades",
+      "with_check": "(empresa_id = ( SELECT private.empresa_estrutura_admin() AS empresa_estrutura_admin))"
+    },
+    {
+      "cmd": "SELECT",
+      "permissive": "PERMISSIVE",
+      "policyname": "unidades_admin_writer_select",
+      "qual": "(empresa_id = ( SELECT private.empresa_leitura_usuarios() AS empresa_leitura_usuarios))",
+      "roles": [
+        "bpf_admin_writer"
+      ],
+      "schemaname": "public",
+      "tablename": "unidades",
+      "with_check": null
+    },
+    {
+      "cmd": "SELECT",
+      "permissive": "PERMISSIVE",
+      "policyname": "unidades_admin_writer_structure_select",
+      "qual": "(empresa_id = ( SELECT private.empresa_estrutura_admin() AS empresa_estrutura_admin))",
+      "roles": [
+        "bpf_admin_writer"
+      ],
+      "schemaname": "public",
+      "tablename": "unidades",
+      "with_check": null
+    },
+    {
+      "cmd": "SELECT",
+      "permissive": "PERMISSIVE",
+      "policyname": "unidades_admin_writer_tenant_select",
+      "qual": "(empresa_id = (NULLIF(current_setting('bpf.active_empresa'::text, true), ''::text))::uuid)",
+      "roles": [
+        "bpf_admin_writer"
+      ],
+      "schemaname": "public",
+      "tablename": "unidades",
+      "with_check": null
+    },
+    {
+      "cmd": "UPDATE",
+      "permissive": "PERMISSIVE",
+      "policyname": "unidades_admin_writer_update",
+      "qual": "(empresa_id = ( SELECT private.empresa_estrutura_admin() AS empresa_estrutura_admin))",
+      "roles": [
+        "bpf_admin_writer"
+      ],
+      "schemaname": "public",
+      "tablename": "unidades",
+      "with_check": "(empresa_id = ( SELECT private.empresa_estrutura_admin() AS empresa_estrutura_admin))"
+    },
+    {
+      "cmd": "SELECT",
+      "permissive": "PERMISSIVE",
+      "policyname": "unidades_entitlement_reader_vinculos",
+      "qual": "(EXISTS ( SELECT 1\n   FROM usuario_empresas ue\n  WHERE ((ue.usuario_id = (NULLIF(current_setting('request.jwt.claim.sub'::text, true), ''::text))::uuid) AND (ue.empresa_id = unidades.empresa_id) AND (ue.status = 'ativo'::text))))",
+      "roles": [
+        "bpf_entitlement_reader"
+      ],
+      "schemaname": "public",
+      "tablename": "unidades",
+      "with_check": null
+    },
+    {
+      "cmd": "SELECT",
+      "permissive": "PERMISSIVE",
+      "policyname": "unidades_plan_enforcer_select",
+      "qual": "true",
+      "roles": [
+        "bpf_plan_enforcer"
+      ],
+      "schemaname": "public",
+      "tablename": "unidades",
+      "with_check": null
+    },
+    {
+      "cmd": "SELECT",
+      "permissive": "PERMISSIVE",
+      "policyname": "unidades_select_da_empresa",
+      "qual": "(EXISTS ( SELECT 1\n   FROM usuarios u\n  WHERE ((u.id = ( SELECT auth.uid() AS uid)) AND (u.empresa_id = unidades.empresa_id) AND (u.ativo = true) AND (u.status = 'ativo'::text))))",
+      "roles": [
+        "authenticated"
+      ],
+      "schemaname": "public",
+      "tablename": "unidades",
+      "with_check": null
+    },
+    {
+      "cmd": "SELECT",
+      "permissive": "PERMISSIVE",
+      "policyname": "unidades_tenant_reader_vinculos",
+      "qual": "(EXISTS ( SELECT 1\n   FROM usuario_empresas ue\n  WHERE ((ue.empresa_id = unidades.empresa_id) AND (ue.usuario_id = private.request_jwt_subject()) AND (ue.status = 'ativo'::text))))",
+      "roles": [
+        "bpf_tenant_reader"
+      ],
+      "schemaname": "public",
+      "tablename": "unidades",
+      "with_check": null
+    },
+    {
+      "cmd": "INSERT",
+      "permissive": "PERMISSIVE",
+      "policyname": "usuario_empresa_perfis_admin_writer_tenant_insert",
+      "qual": null,
+      "roles": [
+        "bpf_admin_writer"
+      ],
+      "schemaname": "public",
+      "tablename": "usuario_empresa_perfis",
+      "with_check": "(EXISTS ( SELECT 1\n   FROM (usuario_empresas ue\n     JOIN perfis p ON (((p.id = usuario_empresa_perfis.perfil_id) AND p.ativo AND (((p.empresa_id IS NULL) AND p.is_system) OR (p.empresa_id = ue.empresa_id)))))\n  WHERE ((ue.id = usuario_empresa_perfis.usuario_empresa_id) AND (ue.empresa_id = (NULLIF(current_setting('bpf.active_empresa'::text, true), ''::text))::uuid))))"
+    },
+    {
+      "cmd": "SELECT",
+      "permissive": "PERMISSIVE",
+      "policyname": "usuario_empresa_perfis_admin_writer_tenant_select",
+      "qual": "(EXISTS ( SELECT 1\n   FROM usuario_empresas ue\n  WHERE ((ue.id = usuario_empresa_perfis.usuario_empresa_id) AND (ue.empresa_id = (NULLIF(current_setting('bpf.active_empresa'::text, true), ''::text))::uuid))))",
+      "roles": [
+        "bpf_admin_writer"
+      ],
+      "schemaname": "public",
+      "tablename": "usuario_empresa_perfis",
+      "with_check": null
+    },
+    {
+      "cmd": "SELECT",
+      "permissive": "PERMISSIVE",
+      "policyname": "usuario_empresa_perfis_select_proprio",
+      "qual": "(EXISTS ( SELECT 1\n   FROM usuario_empresas ue\n  WHERE ((ue.id = usuario_empresa_perfis.usuario_empresa_id) AND (ue.usuario_id = ( SELECT auth.uid() AS uid)))))",
+      "roles": [
+        "authenticated"
+      ],
+      "schemaname": "public",
+      "tablename": "usuario_empresa_perfis",
+      "with_check": null
+    },
+    {
+      "cmd": "SELECT",
+      "permissive": "PERMISSIVE",
+      "policyname": "usuario_empresa_perfis_tenant_reader_proprio",
+      "qual": "(EXISTS ( SELECT 1\n   FROM usuario_empresas ue\n  WHERE ((ue.id = usuario_empresa_perfis.usuario_empresa_id) AND (ue.usuario_id = private.request_jwt_subject()))))",
+      "roles": [
+        "bpf_tenant_reader"
+      ],
+      "schemaname": "public",
+      "tablename": "usuario_empresa_perfis",
+      "with_check": null
+    },
+    {
+      "cmd": "INSERT",
+      "permissive": "PERMISSIVE",
+      "policyname": "usuario_empresas_admin_writer_tenant_insert",
+      "qual": null,
+      "roles": [
+        "bpf_admin_writer"
+      ],
+      "schemaname": "public",
+      "tablename": "usuario_empresas",
+      "with_check": "((empresa_id = (NULLIF(current_setting('bpf.active_empresa'::text, true), ''::text))::uuid) AND (created_by = (NULLIF(current_setting('request.jwt.claim.sub'::text, true), ''::text))::uuid))"
+    },
+    {
+      "cmd": "SELECT",
+      "permissive": "PERMISSIVE",
+      "policyname": "usuario_empresas_admin_writer_tenant_select",
+      "qual": "(empresa_id = (NULLIF(current_setting('bpf.active_empresa'::text, true), ''::text))::uuid)",
+      "roles": [
+        "bpf_admin_writer"
+      ],
+      "schemaname": "public",
+      "tablename": "usuario_empresas",
+      "with_check": null
+    },
+    {
+      "cmd": "SELECT",
+      "permissive": "PERMISSIVE",
+      "policyname": "usuario_empresas_entitlement_reader_proprio",
+      "qual": "(usuario_id = private.request_jwt_subject())",
+      "roles": [
+        "bpf_entitlement_reader"
+      ],
+      "schemaname": "public",
+      "tablename": "usuario_empresas",
+      "with_check": null
+    },
+    {
+      "cmd": "SELECT",
+      "permissive": "PERMISSIVE",
+      "policyname": "usuario_empresas_plan_enforcer_select",
+      "qual": "true",
+      "roles": [
+        "bpf_plan_enforcer"
+      ],
+      "schemaname": "public",
+      "tablename": "usuario_empresas",
+      "with_check": null
+    },
+    {
+      "cmd": "SELECT",
+      "permissive": "PERMISSIVE",
+      "policyname": "usuario_empresas_select_proprio",
+      "qual": "(usuario_id = ( SELECT auth.uid() AS uid))",
+      "roles": [
+        "authenticated"
+      ],
+      "schemaname": "public",
+      "tablename": "usuario_empresas",
+      "with_check": null
+    },
+    {
+      "cmd": "SELECT",
+      "permissive": "PERMISSIVE",
+      "policyname": "usuario_empresas_tenant_reader_proprio",
+      "qual": "(usuario_id = private.request_jwt_subject())",
+      "roles": [
+        "bpf_tenant_reader"
+      ],
+      "schemaname": "public",
+      "tablename": "usuario_empresas",
+      "with_check": null
+    },
+    {
+      "cmd": "DELETE",
+      "permissive": "PERMISSIVE",
+      "policyname": "usuario_perfis_admin_writer_delete",
+      "qual": "(EXISTS ( SELECT 1\n   FROM (usuarios u\n     JOIN perfis p ON (((p.id = usuario_perfis.perfil_id) AND (((p.empresa_id IS NULL) AND p.is_system) OR (p.empresa_id = u.empresa_id)))))\n  WHERE ((u.id = usuario_perfis.usuario_id) AND (u.empresa_id = ( SELECT private.empresa_leitura_usuarios() AS empresa_leitura_usuarios)))))",
+      "roles": [
+        "bpf_admin_writer"
+      ],
+      "schemaname": "public",
+      "tablename": "usuario_perfis",
+      "with_check": null
+    },
+    {
+      "cmd": "INSERT",
+      "permissive": "PERMISSIVE",
+      "policyname": "usuario_perfis_admin_writer_insert",
+      "qual": null,
+      "roles": [
+        "bpf_admin_writer"
+      ],
+      "schemaname": "public",
+      "tablename": "usuario_perfis",
+      "with_check": "(EXISTS ( SELECT 1\n   FROM (usuarios u\n     JOIN perfis p ON (((p.id = usuario_perfis.perfil_id) AND p.ativo AND (((p.empresa_id IS NULL) AND p.is_system) OR (p.empresa_id = u.empresa_id)))))\n  WHERE ((u.id = usuario_perfis.usuario_id) AND (u.empresa_id = ( SELECT private.empresa_leitura_usuarios() AS empresa_leitura_usuarios)))))"
+    },
+    {
+      "cmd": "SELECT",
+      "permissive": "PERMISSIVE",
+      "policyname": "usuario_perfis_admin_writer_select",
+      "qual": "(EXISTS ( SELECT 1\n   FROM (usuarios u\n     JOIN perfis p ON (((p.id = usuario_perfis.perfil_id) AND (((p.empresa_id IS NULL) AND p.is_system) OR (p.empresa_id = u.empresa_id)))))\n  WHERE ((u.id = usuario_perfis.usuario_id) AND (u.empresa_id = ( SELECT private.empresa_leitura_usuarios() AS empresa_leitura_usuarios)))))",
+      "roles": [
+        "bpf_admin_writer"
+      ],
+      "schemaname": "public",
+      "tablename": "usuario_perfis",
+      "with_check": null
+    },
+    {
+      "cmd": "INSERT",
+      "permissive": "PERMISSIVE",
+      "policyname": "usuario_perfis_admin_writer_tenant_insert",
+      "qual": null,
+      "roles": [
+        "bpf_admin_writer"
+      ],
+      "schemaname": "public",
+      "tablename": "usuario_perfis",
+      "with_check": "(EXISTS ( SELECT 1\n   FROM (usuarios u\n     JOIN perfis p ON (((p.id = usuario_perfis.perfil_id) AND p.ativo AND (((p.empresa_id IS NULL) AND p.is_system) OR (p.empresa_id = (NULLIF(current_setting('bpf.active_empresa'::text, true), ''::text))::uuid)))))\n  WHERE ((u.id = usuario_perfis.usuario_id) AND (u.empresa_id = (NULLIF(current_setting('bpf.active_empresa'::text, true), ''::text))::uuid))))"
+    },
+    {
+      "cmd": "SELECT",
+      "permissive": "PERMISSIVE",
+      "policyname": "usuario_perfis_authz_reader_proprio",
+      "qual": "(usuario_id = ( SELECT (NULLIF(current_setting('request.jwt.claim.sub'::text, true), ''::text))::uuid AS \"nullif\"))",
+      "roles": [
+        "bpf_authz_reader"
+      ],
+      "schemaname": "public",
+      "tablename": "usuario_perfis",
+      "with_check": null
+    },
+    {
+      "cmd": "SELECT",
+      "permissive": "PERMISSIVE",
+      "policyname": "usuario_perfis_select_proprio",
+      "qual": "((usuario_id = ( SELECT auth.uid() AS uid)) OR (EXISTS ( SELECT 1\n   FROM (usuarios u\n     JOIN perfis p ON (((p.id = usuario_perfis.perfil_id) AND (((p.empresa_id IS NULL) AND p.is_system) OR (p.empresa_id = u.empresa_id)))))\n  WHERE ((u.id = usuario_perfis.usuario_id) AND (u.empresa_id = ( SELECT private.empresa_leitura_usuarios() AS empresa_leitura_usuarios))))))",
+      "roles": [
+        "authenticated"
+      ],
+      "schemaname": "public",
+      "tablename": "usuario_perfis",
+      "with_check": null
+    },
+    {
+      "cmd": "SELECT",
+      "permissive": "PERMISSIVE",
+      "policyname": "usuarios_admin_writer_pending_target_select",
+      "qual": "((empresa_id IS NULL) AND (status = 'pendente'::text) AND (id = (NULLIF(current_setting('bpf.invite_target'::text, true), ''::text))::uuid))",
+      "roles": [
+        "bpf_admin_writer"
+      ],
+      "schemaname": "public",
+      "tablename": "usuarios",
+      "with_check": null
+    },
+    {
+      "cmd": "UPDATE",
+      "permissive": "PERMISSIVE",
+      "policyname": "usuarios_admin_writer_pending_target_update",
+      "qual": "((empresa_id IS NULL) AND (status = 'pendente'::text) AND (id = (NULLIF(current_setting('bpf.invite_target'::text, true), ''::text))::uuid))",
+      "roles": [
+        "bpf_admin_writer"
+      ],
+      "schemaname": "public",
+      "tablename": "usuarios",
+      "with_check": "((empresa_id = ( SELECT private.empresa_convite_usuarios() AS empresa_convite_usuarios)) AND (status = 'ativo'::text) AND ativo)"
+    },
+    {
+      "cmd": "UPDATE",
+      "permissive": "PERMISSIVE",
+      "policyname": "usuarios_admin_writer_pending_target_update_tenant",
+      "qual": "((empresa_id IS NULL) AND (status = 'pendente'::text) AND (id = (NULLIF(current_setting('bpf.invite_target'::text, true), ''::text))::uuid))",
+      "roles": [
+        "bpf_admin_writer"
+      ],
+      "schemaname": "public",
+      "tablename": "usuarios",
+      "with_check": "((empresa_id = (NULLIF(current_setting('bpf.active_empresa'::text, true), ''::text))::uuid) AND (status = 'ativo'::text) AND ativo)"
+    },
+    {
+      "cmd": "SELECT",
+      "permissive": "PERMISSIVE",
+      "policyname": "usuarios_admin_writer_select",
+      "qual": "(empresa_id = ( SELECT private.empresa_leitura_usuarios() AS empresa_leitura_usuarios))",
+      "roles": [
+        "bpf_admin_writer"
+      ],
+      "schemaname": "public",
+      "tablename": "usuarios",
+      "with_check": null
+    },
+    {
+      "cmd": "SELECT",
+      "permissive": "PERMISSIVE",
+      "policyname": "usuarios_admin_writer_structure_select",
+      "qual": "(empresa_id = ( SELECT private.empresa_estrutura_admin() AS empresa_estrutura_admin))",
+      "roles": [
+        "bpf_admin_writer"
+      ],
+      "schemaname": "public",
+      "tablename": "usuarios",
+      "with_check": null
+    },
+    {
+      "cmd": "UPDATE",
+      "permissive": "PERMISSIVE",
+      "policyname": "usuarios_admin_writer_update",
+      "qual": "(empresa_id = ( SELECT private.empresa_leitura_usuarios() AS empresa_leitura_usuarios))",
+      "roles": [
+        "bpf_admin_writer"
+      ],
+      "schemaname": "public",
+      "tablename": "usuarios",
+      "with_check": "(empresa_id = ( SELECT private.empresa_leitura_usuarios() AS empresa_leitura_usuarios))"
+    },
+    {
+      "cmd": "SELECT",
+      "permissive": "PERMISSIVE",
+      "policyname": "usuarios_authz_reader_proprio",
+      "qual": "(id = ( SELECT (NULLIF(current_setting('request.jwt.claim.sub'::text, true), ''::text))::uuid AS \"nullif\"))",
+      "roles": [
+        "bpf_authz_reader"
+      ],
+      "schemaname": "public",
+      "tablename": "usuarios",
+      "with_check": null
+    },
+    {
+      "cmd": "SELECT",
+      "permissive": "PERMISSIVE",
+      "policyname": "usuarios_entitlement_reader_proprio",
+      "qual": "(id = private.request_jwt_subject())",
+      "roles": [
+        "bpf_entitlement_reader"
+      ],
+      "schemaname": "public",
+      "tablename": "usuarios",
+      "with_check": null
+    },
+    {
+      "cmd": "SELECT",
+      "permissive": "PERMISSIVE",
+      "policyname": "usuarios_plan_enforcer_select",
+      "qual": "true",
+      "roles": [
+        "bpf_plan_enforcer"
+      ],
+      "schemaname": "public",
+      "tablename": "usuarios",
+      "with_check": null
+    },
+    {
+      "cmd": "SELECT",
+      "permissive": "PERMISSIVE",
+      "policyname": "usuarios_select_proprio",
+      "qual": "((id = ( SELECT auth.uid() AS uid)) OR (empresa_id = ( SELECT private.empresa_leitura_usuarios() AS empresa_leitura_usuarios)))",
+      "roles": [
+        "authenticated"
+      ],
+      "schemaname": "public",
+      "tablename": "usuarios",
+      "with_check": null
+    },
+    {
+      "cmd": "SELECT",
+      "permissive": "PERMISSIVE",
+      "policyname": "usuarios_tenant_reader_proprio",
+      "qual": "(id = private.request_jwt_subject())",
+      "roles": [
+        "bpf_tenant_reader"
+      ],
+      "schemaname": "public",
+      "tablename": "usuarios",
+      "with_check": null
+    }
+  ]
+}

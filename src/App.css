@@ -1154,3 +1154,5 @@ body:has(.mobile-sidebar[open]) {
   }
 }
 
+
+.workspace-commercial-banner{margin:14px 20px 0;padding:11px 14px;border-radius:8px;display:flex;gap:10px;align-items:center;font-size:12px}.workspace-commercial-banner.normal{background:#edf7f1;border:1px solid #cfe8da;color:#2d694e}.workspace-commercial-banner.somente_leitura{background:#fff7e8;border:1px solid #eed9ad;color:#7c5d1f}.workspace-commercial-banner strong{white-space:nowrap}.workspace-commercial-banner span{line-height:1.4}@media(max-width:760px){.workspace-commercial-banner{margin:10px 12px 0;align-items:flex-start;flex-direction:column;gap:3px}}
