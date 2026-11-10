@@ -104,3 +104,8 @@ A role recebe apenas SELECT de identidade e grants de coluna nas relações do t
 Toda escrita valida acesso, obtém lock de empresa, revalida permissão, bloqueia linha comercial, valida modo de escrita e alvos, muda estado e registra auditoria na mesma transação. O escopo GUC anterior é restaurado em sucesso/erro. O convite server-only verifica o ator real antes e depois do lock e respeita trial/somente leitura. Os contadores de uso/quota, billing e checkout dão precedência ao membership canônico sobre o fallback legado.
 
 As 17 suites históricas validam o contrato até31; nove suites compatíveis são repetidas no estado32, além da matriz nova de administração e QA secundário. Testes antigos que exigem alteração da identidade global representam o contrato histórico, não são usados como expectativa pós32. A verificação remota de metadados não substitui smoke autenticado, concorrência PostgreSQL ou advisors.
+
+
+## Retomada da32 pendente — 10/11/2026
+
+A32 não depende mais de nomes das policies do baseline: quatro guards SELECT restritivos próprios limitam todas as permissivas aplicáveis. A verificação final confere predicados e dependências por OID, não apenas nomes. Antes do primeiro DDL, a transação exige o mesmo SELECT de 17 precondições executado pelo helper antes do push, incluindo fontes/ACLs legadas e ausência de estado misto. As funções privadas de compatibilidade perdem EXECUTE de PUBLIC/anon/service_role sob seus owners; os quatro convites antigos ficam fechados também para authenticated. O canal server-only atual é preservado. Ver detalhes e limitações no plano EMPRESA-TESTE-DOCUMENTOS.

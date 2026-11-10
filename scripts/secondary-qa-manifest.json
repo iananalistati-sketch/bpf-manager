@@ -31,11 +31,12 @@
     "20261013180000_subscription_checkout_intents.sql": "2aff11c5f3dc0412ccc0ff5e2e74ce6fa21bd7754ffca14c1dde5263e42f0d12",
     "20261014124000_document_control_foundation.sql": "dc19fff4d57ee92a21dbd861a1175f25afe036bf5b6a0712e62f99b2be3ac2fd",
     "20261015203000_document_control_integrity.sql": "73f2765c8a9d0c31871021e9a12b4ff303a367bf3387b9823dfe6c879f901a62",
-    "20261029160000_tenant_administration.sql": "0fb5d43a06327b4e64e391110e9ac5dcdf2d240895df7feafe65e12da0553f3a"
+    "20261029160000_tenant_administration.sql": "5c15eedbf96c3cee1cd9acccb2969767c96db020b9dce054e2171762fee6da40"
   },
   "sql": {
-    "scripts/sql/verify-tenant-admin.sql": "5edd1dec1b453956632c701b7e9baaa716d8a07fcc0d2491658c427ede8f6ec9",
+    "scripts/sql/verify-tenant-admin.sql": "8c0473e2a793bc9c745eaa03b7bd753e80c62d5170d82055bb71c07706b0f8ba",
     "scripts/sql/provision-secondary-qa.sql": "469ce245d34d568e71fac6e22afcd864269778766567d274e790dcba940444d8",
-    "scripts/sql/inspect-secondary-qa.sql": "a7b3ae54510907d4663a4f9379098dce69bba46862f8777397f816daf7cc2b69"
+    "scripts/sql/inspect-secondary-qa.sql": "a7b3ae54510907d4663a4f9379098dce69bba46862f8777397f816daf7cc2b69",
+    "scripts/sql/verify-tenant-admin-before-apply.sql": "15fbcec7f5f2854d544d86ea6285e8f8c4c9091549e03addf93bca9e7aef72a7"
   }
 }

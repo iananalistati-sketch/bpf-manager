@@ -8,6 +8,7 @@ import { validateEmail } from './supabase-prepare-qa.mjs'
 import { buildCliArgs,officialProjectRef,repositoryRoot,runCommand,withDatabasePassword } from './supabase-preflight.mjs'
 
 export const administrationChecks=[...documentChecks,'administracao_contratos','administracao_role','administracao_rls']
+export const readinessChecks=[...documentChecks,'executor_postgres','sem_objetos_32','funcoes_base_31','funcoes_acl_sem_ampliacao','view_base_31','tabelas_rls','roles_base_31','clientes_sem_escrita_direta','convites_legados_reconhecidos']
 export const secondaryChecks=['conta_valida','marcador_ausente','primario_ativo','segundo_vinculo','perfil_local','trial_valido','onboarding','auditoria']
 export const secondaryVersions=Object.keys(manifest.migrations).sort().map(name=>name.slice(0,14))
 const sameKeys=(value,keys)=>value&&typeof value==='object'&&!Array.isArray(value)
@@ -55,6 +56,13 @@ export function verifyAdministration(rows) {
     ||administrationChecks.some(name=>rows[0][name]!==true))throw new Error('Verificacao remota administrativa incompleta ou divergente.')
 }
 
+export function verifyReadiness(rows) {
+  if(!Array.isArray(rows)||rows.length!==1||!sameKeys(rows[0],readinessChecks)
+    ||readinessChecks.some(name=>typeof rows[0][name]!=='boolean'))throw new Error('ADMIN_31_BLOQUEADO: resposta de precondicoes invalida. Nenhuma escrita iniciada.')
+  const failed=readinessChecks.filter(name=>rows[0][name]!==true)
+  if(failed.length)throw new Error(`ADMIN_31_BLOQUEADO: ${failed.join(', ')}. Nenhuma escrita iniciada; nao usar repair.`)
+}
+
 export function classifySecondary(rows) {
   const row=Array.isArray(rows)&&rows.length===1?rows[0]:null
   if(!sameKeys(row,['checks','empresa_id','trial_fim'])||!sameKeys(row.checks,secondaryChecks)
@@ -86,6 +94,9 @@ export async function setupSecondaryQa({root=repositoryRoot,env=process.env,run=
     }
     let state=await history(),code=0
     if(state===31) {
+      await validateSecondaryPayload(root)
+      output.write('Conferindo precondicoes e ausencia de estado parcial (somente leitura)...\n')
+      verifyReadiness(await query(await secondarySql(root,'scripts/sql/verify-tenant-admin-before-apply.sql')))
       await validateSecondaryPayload(root)
       output.write('31 alinhadas; aplicando somente 20261029160000_tenant_administration.sql...\n')
       try{code=await run(buildCliArgs(root,env,['db','push','--skip-vault','--yes']),context)}catch{code=1}

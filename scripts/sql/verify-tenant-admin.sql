@@ -77,13 +77,31 @@ select
  select p.*,n.nspname from pg_proc p join pg_namespace n on n.oid=p.pronamespace
  where n.nspname in ('private','public') and p.proname in('admin_contexto_ler','admin_usuario_status_tenant','admin_usuario_unidade_tenant',
  'admin_usuario_perfil_tenant','admin_empresa_tenant','admin_unidade_tenant','admin_setor_tenant','admin_perfil_tenant')
+), legacy_closed as (
+ select p.* from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='private' and p.proname in
+ ('empresa_leitura_usuarios','empresa_gestao_perfis','empresa_convite_usuarios','empresa_estrutura_admin','empresa_leitura_auditoria',
+ 'admin_usuario_alterar_status','admin_usuario_alterar_unidade','admin_usuario_alterar_perfil','admin_empresa_atualizar',
+ 'admin_unidade_salvar','admin_setor_salvar','admin_perfil_criar','admin_perfil_atualizar')
 )
+, retired_invites as (
+ select p.* from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname in('private','public')
+ and p.proname in('admin_usuario_vincular_convite','admin_usuario_vincular_convite_tenant')
+)
+
 select documents.*,
  (select count(*)=16 and bool_and(coalesce(p.proconfig,'{}'::text[]) @> array['search_path=""'])
    and bool_and(case when p.nspname='private' then p.prosecdef and p.proowner='bpf_tenant_admin'::regrole else not p.prosecdef end)
    and bool_and(has_function_privilege('authenticated',p.oid,'EXECUTE'))
    and bool_and(not has_function_privilege('anon',p.oid,'EXECUTE') and not has_function_privilege('service_role',p.oid,'EXECUTE'))
-   from admin_functions p) as administracao_contratos,
+   from admin_functions p)
+ and (select count(*)=13 and bool_and(p.prosecdef and p.proconfig @> array['search_path=""']::text[]
+   and pg_get_userbyid(p.proowner)=case when p.proname like 'empresa_%' then 'bpf_authz_reader' else 'bpf_admin_writer' end
+   and has_function_privilege('authenticated',p.oid,'EXECUTE') and not has_function_privilege('anon',p.oid,'EXECUTE')
+   and not has_function_privilege('service_role',p.oid,'EXECUTE')) from legacy_closed p)
+ and not exists(select 1 from legacy_closed p cross join lateral aclexplode(coalesce(p.proacl,acldefault('f',p.proowner))) a where a.grantee=0)
+ and (select count(*)=4 and bool_and(not has_function_privilege('authenticated',p.oid,'EXECUTE')
+   and not has_function_privilege('anon',p.oid,'EXECUTE') and not has_function_privilege('service_role',p.oid,'EXECUTE')) from retired_invites p)
+ and not exists(select 1 from retired_invites p cross join lateral aclexplode(coalesce(p.proacl,acldefault('f',p.proowner))) a where a.grantee=0) as administracao_contratos,
  (select count(*)=1 and bool_and(not rolcanlogin and not rolinherit and not rolsuper and not rolbypassrls)
    from pg_roles where rolname='bpf_tenant_admin')
    and not pg_has_role('authenticated','bpf_tenant_admin','SET')
@@ -96,5 +114,18 @@ select documents.*,
      and has_column_privilege('bpf_tenant_admin',a.attrelid,a.attname,'INSERT,UPDATE,REFERENCES')) as administracao_role,
  (select count(*)=10 and bool_and(relrowsecurity) from pg_class c join pg_namespace n on n.oid=c.relnamespace
    where n.nspname='public' and c.relname in('usuarios','empresas','unidades','setores','perfis','permissoes',
-   'perfil_permissoes','usuario_empresas','usuario_empresa_perfis','auditoria_eventos')) as administracao_rls
+   'perfil_permissoes','usuario_empresas','usuario_empresa_perfis','auditoria_eventos'))
+ and (select count(*)=4 and bool_and(not p.polpermissive and p.polcmd='r' and p.polroles=array['authenticated'::regrole::oid]
+   and p.polwithcheck is null and md5(regexp_replace(replace(replace(pg_get_expr(p.polqual,p.polrelid),'public.',''),'private.',''),'\s+','','g'))=e.hash
+   and exists(select 1 from pg_depend d where d.classid='pg_policy'::regclass and d.objid=p.oid and d.refclassid='pg_proc'::regclass and d.refobjid=to_regprocedure('private.primary_visible_empresa()'))
+   and (c.relname<>'setores' or exists(select 1 from pg_depend d where d.classid='pg_policy'::regclass and d.objid=p.oid and d.refclassid='pg_class'::regclass and d.refobjid='public.unidades'::regclass)))
+   from (values ('empresas','5148e012d01c99726624b73af85c0f04'),('perfis','2106fe59761c4bca9adb24d2e535c692'),('setores','a7f83b793c786c50014d32b7d31559f4'),('unidades','3a5de2a711a1a27e9ca36d41937dbbee')) e(name,hash)
+   join pg_class c on c.relname=e.name and c.relnamespace='public'::regnamespace
+   join pg_policy p on p.polrelid=c.oid and p.polname='tenant_admin_primary_guard')
+ and coalesce((select p.prosecdef and p.provolatile='s' and p.prorettype='uuid'::regtype and p.proconfig @> array['search_path=""']::text[]
+   and pg_get_userbyid(p.proowner)='postgres' and md5(replace(p.prosrc,E'\r\n',E'\n'))='2c00f1010f99ed954a472835381b6ee1'
+   and has_function_privilege('authenticated',p.oid,'EXECUTE') and not has_function_privilege('anon',p.oid,'EXECUTE')
+   and not has_function_privilege('service_role',p.oid,'EXECUTE')
+   and not exists(select 1 from aclexplode(coalesce(p.proacl,acldefault('f',p.proowner))) a where a.grantee=0)
+   from pg_proc p where p.oid=to_regprocedure('private.primary_visible_empresa()')),false) as administracao_rls
 from documents;

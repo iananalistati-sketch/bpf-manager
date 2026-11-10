@@ -189,8 +189,15 @@ try {
 
   await testQaWorkspace(db)
 
+  await db.exec('CREATE SCHEMA supabase_migrations; CREATE TABLE supabase_migrations.schema_migrations(version text primary key)')
+  for(const path of historicalMigrations) await db.query('INSERT INTO supabase_migrations.schema_migrations VALUES($1)',[path.split('/').at(-1).slice(0,14)])
+  const { testAdministrationReadinessAdversarial } = await import('./test-administration-readiness-db.mjs')
+  await testAdministrationReadinessAdversarial(db,await read('scripts/sql/verify-tenant-admin-before-apply.sql'))
+  const { testAdministrationRecovery } = await import('./test-administration-recovery-db.mjs')
+  await testAdministrationRecovery(db,await read(laterMigrations[0]),await read('scripts/sql/verify-tenant-admin-before-apply.sql'))
   for (const path of laterMigrations) {
     await db.exec(`BEGIN;\n${await read(path)}\nCOMMIT;`)
+    await db.query('INSERT INTO supabase_migrations.schema_migrations VALUES($1)',[path.split('/').at(-1).slice(0,14)])
     console.log(`PASS: applied canonical upgrade ${path.split('/').at(-1)}`)
   }
   if(laterMigrations.length) {
@@ -204,6 +211,7 @@ try {
     }
     console.log('PASS: nine compatible historical suites also pass on the final canonical schema')
   }
+  await db.exec('DROP TABLE supabase_migrations.schema_migrations; DROP SCHEMA supabase_migrations')
 
   const { rows: users } = await db.query('SELECT count(*)::int AS count FROM public.usuarios')
   if (users[0].count !== 0) throw new Error('Test fixtures were not rolled back')

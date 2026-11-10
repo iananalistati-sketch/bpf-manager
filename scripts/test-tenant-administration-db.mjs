@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict'
 import { administrationChecks,classifySecondary,secondarySql,verifyAdministration } from './supabase-setup-secondary-qa.mjs'
 import { repositoryRoot } from './supabase-preflight.mjs'
-import { readFile,readdir } from 'node:fs/promises'
+import { readFile } from 'node:fs/promises'
 
-export async function testTenantAdministration(db) {
+export async function testTenantAdministration(db,{withinTransaction=false,directPrimaryAllowed=true}={}) {
   const A='ab100000-0000-0000-0000-000000000001',B='ab100000-0000-0000-0000-000000000002'
   const actor='ab000000-0000-0000-0000-000000000001',target='ab000000-0000-0000-0000-000000000002',outsider='ab000000-0000-0000-0000-000000000003'
   const unitA='ab200000-0000-0000-0000-000000000001',unitB='ab200000-0000-0000-0000-000000000002'
@@ -22,10 +22,11 @@ export async function testTenantAdministration(db) {
     try{await assert.rejects(query(sql,args),e=>e.code===code)}
     finally{await db.exec('ROLLBACK TO SAVEPOINT denied; RELEASE SAVEPOINT denied')}
   }
-  await db.exec('BEGIN')
+  await db.exec(withinTransaction?'SAVEPOINT tenant_admin_fixture':'BEGIN')
   try {
     await query(`insert into public.empresas(id,razao_social) values($1,'PRIMARY preserved'),($2,'TESTE')`,[A,B])
     await query(`insert into public.unidades(id,empresa_id,nome) values($1,$2,'Primary unit'),($3,$4,'TESTE unit')`,[unitA,A,unitB,B])
+    await query(`insert into public.setores(id,unidade_id,nome) values('ab500000-0000-0000-0000-000000000001',$1,'Primary sector'),('ab500000-0000-0000-0000-000000000002',$2,'TESTE sector')`,[unitA,unitB])
     for(const [id,email] of [[actor,'admin@test.invalid'],[target,'target@test.invalid'],[outsider,'outside@test.invalid']]) {
       await query('insert into auth.users(id,email) values($1,$2)',[id,email])
       await query("update public.usuarios set empresa_id=$1,unidade_id=$2,status='ativo' where id=$3",[A,unitA,id])
@@ -104,6 +105,23 @@ export async function testTenantAdministration(db) {
       }
       return result
     }
+    // Ag09: both historical invitation families are retired at SQL privilege level.
+    const retiredInvites=[
+      ['public.admin_usuario_vincular_convite(uuid,uuid,uuid[],text)',"select public.admin_usuario_vincular_convite(null,null,'{}'::uuid[],'Retired primary path')"],
+      ['private.admin_usuario_vincular_convite(uuid,uuid,uuid[],text)',"select private.admin_usuario_vincular_convite(null,null,'{}'::uuid[],'Retired private primary path')"],
+      ['public.admin_usuario_vincular_convite_tenant(uuid,uuid,uuid,uuid[],text)',"select public.admin_usuario_vincular_convite_tenant(null,null,null,'{}'::uuid[],'Retired tenant path')"],
+      ['private.admin_usuario_vincular_convite_tenant(uuid,uuid,uuid,uuid[],text)',"select private.admin_usuario_vincular_convite_tenant(null,null,null,'{}'::uuid[],'Retired private tenant path')"],
+    ]
+    const retiredBefore=await securitySnapshot()
+    await auth()
+    for(const [,sql] of retiredInvites)await fails(sql)
+    await db.exec('RESET ROLE')
+    for(const [signature] of retiredInvites)for(const role of ['anon','authenticated','service_role']) {
+      assert.equal((await query('select has_function_privilege($1,$2,\'EXECUTE\') allowed',[role,signature])).rows[0].allowed,false)
+    }
+    assert.deepEqual(await securitySnapshot(),retiredBefore)
+    console.log('PASS09: all four retired invitation endpoints deny authenticated direct SQL before their bodies; no identity/membership/audit changes')
+
     await db.exec('SAVEPOINT security_matrix')
     const testSector='ab500000-0000-0000-0000-000000000009'
     const unusedProfile='ab300000-0000-0000-0000-000000000008'
@@ -180,6 +198,11 @@ export async function testTenantAdministration(db) {
     assert.deepEqual(privileges,{global_write:false,legacy_write:false,set_role:false})
     await auth()
     assert.equal((await query('select * from public.v_meu_contexto')).rows[0].empresa_id,A)
+    for(const [table,idA,idB] of [['empresas',A,B],['unidades',unitA,unitB],['perfis',profileA,profileB],
+      ['setores','ab500000-0000-0000-0000-000000000001','ab500000-0000-0000-0000-000000000002']]) {
+      assert.equal((await query(`select id from public.${table} where id=$1`,[idA])).rows.length,directPrimaryAllowed?1:0)
+      assert.equal((await query(`select id from public.${table} where id=$1`,[idB])).rows.length,0)
+    }
     const page=(await query("select public.admin_contexto_ler($1,'usuarios',0,1) as page",[B])).rows[0].page
     assert.equal(page.count,2);assert.equal(page.data.length,1)
     assert.equal(page.data[0].empresa_id,B);assert.ok(page.data[0].membership_id)
@@ -285,10 +308,6 @@ export async function testTenantAdministration(db) {
     await db.exec('ROLLBACK TO SAVEPOINT quota08;RELEASE SAVEPOINT quota08');console.log('PASS08: canonical primary deactivation releases quota despite active legacy identity; secondary quota unchanged');
 
     // Exact deployed metadata verifier, exercised against the cumulative 32-state.
-    await db.exec('CREATE SCHEMA supabase_migrations; CREATE TABLE supabase_migrations.schema_migrations(version text primary key)')
-    for(const file of(await readdir(new URL('../supabase/migrations',import.meta.url))).sort()) {
-      await query('insert into supabase_migrations.schema_migrations(version) values($1)',[file.slice(0,14)])
-    }
     const metadata=(await query(await readFile(new URL('./sql/verify-tenant-admin.sql',import.meta.url),'utf8'))).rows
     assert.deepEqual(metadata[0],Object.fromEntries(administrationChecks.map(name=>[name,true])))
     verifyAdministration(metadata)
@@ -298,12 +317,23 @@ export async function testTenantAdministration(db) {
       ['GRANT INSERT(usuario_id) ON public.usuario_perfis TO bpf_tenant_admin','administracao_role'],
       ['GRANT bpf_tenant_admin TO postgres WITH INHERIT FALSE,SET TRUE;SET LOCAL ROLE bpf_tenant_admin;GRANT EXECUTE ON FUNCTION private.admin_empresa_tenant(uuid,text,text,text,text) TO PUBLIC;RESET ROLE','administracao_contratos'],
       ['ALTER TABLE public.usuario_empresas DISABLE ROW LEVEL SECURITY','administracao_rls'],
+      ['ALTER POLICY tenant_admin_primary_guard ON public.empresas USING(true)','administracao_rls'],
+      ['ALTER POLICY tenant_admin_primary_guard ON public.unidades TO authenticated,service_role','administracao_rls'],
+      ['DROP POLICY tenant_admin_primary_guard ON public.perfis','administracao_rls'],
+      ["CREATE OR REPLACE FUNCTION private.primary_visible_empresa() RETURNS uuid LANGUAGE sql STABLE SECURITY DEFINER SET search_path='' AS $$select null::uuid$$",'administracao_rls'],
+      ['GRANT EXECUTE ON FUNCTION private.primary_visible_empresa() TO anon','administracao_rls'],
+      ['GRANT bpf_admin_writer TO postgres WITH INHERIT FALSE,SET TRUE;SET LOCAL ROLE bpf_admin_writer;GRANT EXECUTE ON FUNCTION private.admin_usuario_vincular_convite(uuid,uuid,uuid[],text) TO PUBLIC;RESET ROLE','administracao_contratos'],
     ]) {
       await db.exec('SAVEPOINT metadata_drift')
       await db.exec(change)
       assert.equal((await query(await readFile(new URL('./sql/verify-tenant-admin.sql',import.meta.url),'utf8'))).rows[0][check],false)
       await db.exec('ROLLBACK TO SAVEPOINT metadata_drift;RELEASE SAVEPOINT metadata_drift')
     }
+
+    const previousPath=(await query("select current_setting('search_path') value")).rows[0].value
+    await query("select set_config('search_path','private,public',true)")
+    verifyAdministration((await query(await readFile(new URL('./sql/verify-tenant-admin.sql',import.meta.url),'utf8'))).rows)
+    await query("select set_config('search_path',$1,true)",[previousPath])
 
     await db.exec(`ALTER TABLE auth.users ADD COLUMN email_confirmed_at timestamptz;
       ALTER TABLE auth.users ADD COLUMN banned_until timestamptz;
@@ -334,5 +364,5 @@ export async function testTenantAdministration(db) {
     await db.exec('RESET ROLE')
     assert.deepEqual(await snapshot(),preservedPrimary)
     console.log('PASS: exact 32 metadata verifier, secondary QA atomic rollback/idempotency, canonical UI context and primary/identity/legacy preservation')
-  } finally {await db.exec('ROLLBACK')}
+  } finally {await db.exec(withinTransaction?'ROLLBACK TO SAVEPOINT tenant_admin_fixture;RELEASE SAVEPOINT tenant_admin_fixture':'ROLLBACK')}
 }

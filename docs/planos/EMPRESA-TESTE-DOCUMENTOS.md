@@ -2,7 +2,25 @@
 
 > Procedimento atual: **QA secundário**, descrito a seguir. O procedimento v1 abaixo permanece como histórico da conta dedicada; ele não deve ser usado para uma conta que já tem empresa.
 
-> **Aplicação da migração 32 bloqueada após a tentativa remota.** Não repetir `supabase:setup:qa:secondary` até concluir o diagnóstico e revisar a correção. A aprovação local registrada abaixo é histórica e não confirma implantação remota.
+> **Retomada condicional da migração 32:** usar somente a revisão de 10/11/2026 após os gates e o checkpoint local verde. O próprio comando verifica o estado remoto antes de qualquer escrita; divergência bloqueia a retomada. A implantação remota ainda não está confirmada.
+
+## Correção e retomada condicional — 10/11/2026
+
+O trecho recebido do diagnóstico contém todas as 66 policies, as cinco roles restritas, 15 tabelas com RLS, o hash da view e as 31 versões esperadas, sem registro da32 ou role `bpf_tenant_admin`. Os nomes reais são `empresas_select_da_empresa`, `unidades_select_da_empresa`, `setores_select_da_empresa` e `perfis_select_visiveis`. O trecho não inclui funções e ACLs completas e, portanto, não comprova sozinho rollback.
+
+A32 ainda pendente foi corrigida: quatro policies próprias `tenant_admin_primary_guard`, `AS RESTRICTIVE FOR SELECT TO authenticated`, intersectam as permissivas existentes, independentemente dos nomes. Elas não concedem acesso onde não há policy permissiva. As31 migrations já aplicadas não foram alteradas. Permissões das funções privadas de compatibilidade são ajustadas sob seus owners; quatro funções antigas de convite ficam sem EXECUTE para PUBLIC/anon/authenticated/service_role, preservando o canal server-only atual.
+
+Antes do push, o helper executa o novo SELECT fixo `verify-tenant-admin-before-apply.sql`, hasheado no manifesto. Exige exatamente 17 booleans true: os oito checks documentais da31, executor correto, ausência de objetos32 inclusive overloads, fonte/owner/contrato/configuração de 22 funções alteradas, ACLs sem ampliação, view canônica conhecida, RLS/owners, roles sem privilégios inesperados/CREATE/SET/INHERIT, ausência de escrita direta de clientes e reconhecimento dos quatro convites antigos. Essa leitura verifica automaticamente os metadados que não couberam no envio do usuário. Permissões mais estreitas que o baseline são aceitas; permissões ampliadas são recusadas.
+
+O mesmo SELECT é repetido no início da migração antes do primeiro DDL e comparado por teste ao arquivo separado. Qualquer flag false/NULL ou formato inesperado bloqueia. O payload local é revalidado depois da leitura e antes do push. Se a32 já estiver registrada, não repete push: exige o verificador final com quatro guards, predicados/dependências corretos, helper com fonte/owner/ACL seguros, 13 funções legadas limitadas e quatro convites antigos desativados. Não faz repair nem adota um estado misto.
+
+Após gates internos e checkpoint local verde, usar o procedimento QA secundário abaixo com o e-mail original. `ADMIN_31_BLOQUEADO` informa somente os nomes dos checks divergentes e encerra antes da escrita; basta enviar essa saída curta para análise. Não é necessário copiar o diagnóstico inteiro novamente. Quando houver aplicação, a leitura posterior confirma histórico/estrutura e só então pode criar a TESTE. `QA_SECUNDARIO_PRONTO` permanece o resultado esperado, com onboarding real pelo login original.
+
+Regressões locais cobrem as 66 policies reais (somente metadados no fixture), nomes arbitrários com permissiva adicional USING(true), ausência de permissivas, precondições em READ ONLY e rejeição de estado parcial antes do DDL. Em cada variante, a matriz completa de administração, isolamento, rollback de auditoria, compatibilidade e provisionamento QA é repetida; leituras diretas também são verificadas com empresas e vínculos ativos, evitando asserts em tabelas vazias. O verificador rejeita mudança de predicado/roles, perda de guard, exposição de helper/convites e mantém resultado estável com search_path diferente.
+
+Validação em 10/11/2026: `validate:local` concluído com exit code 0: 78 testes de tooling, banco com as três variantes adicionais de policies, build, lint e 54 E2E sem skipped. Gates 08, 09 e 07: **APROVADOS**, sem bloqueadores na retomada condicional.
+
+Implantação remota, smoke autenticado, advisors e concorrência PostgreSQL real permanecem pendentes. A validade deste conjunto não autoriza editar uma32 já registrada em outro ambiente.
 
 ## Diagnóstico do incidente — 09/11/2026
 
@@ -19,7 +37,7 @@ npm.cmd run supabase:diagnose:administracao
 
 Enviar a saída para revisão. O parser exige formato exato e limitado; stdout/stderr brutos do CLI são suprimidos em falhas e a saída final passa por expurgo da senha. `DIAGNOSTICO_ADMIN_CONCLUIDO` confirma somente coleta de metadados: não autoriza retry, repair, push ou criação QA. Se a consulta falhar, permanece bloqueado e não há repetição automática.
 
-A correção será definida após observar esse estado. As 31 migrations aplicadas permanecem imutáveis e a 32 também não foi alterada nesta entrega diagnóstica. A alternativa local avaliada usa guards SELECT restritivos com nomes próprios para intersectar as permissivas existentes, evitando dependência dos nomes e bypass por OR. Essa alternativa não foi liberada remotamente. Antes de revisar qualquer migration pendente é necessário conferir ledger e vestígios da tentativa, incluindo funções/roles/policies/grants e compatibilidade legada.
+Na entrega diagnóstica de 09/11, a correção ainda dependia de observar esse estado. As 31 migrations aplicadas permanecem imutáveis e a 32 também não foi alterada nesta entrega diagnóstica. A alternativa local avaliada usa guards SELECT restritivos com nomes próprios para intersectar as permissivas existentes, evitando dependência dos nomes e bypass por OR. Essa alternativa não foi liberada remotamente. Antes de revisar qualquer migration pendente é necessário conferir ledger e vestígios da tentativa, incluindo funções/roles/policies/grants e compatibilidade legada.
 
 Validação em 09/11/2026: `validate:local` terminou com exit code 0, 75 testes de tooling, banco, build, lint e 54 E2E sem skipped. O diagnóstico foi executado em transação READ ONLY, com policies ausentes/renomeadas e vestígios da migração 32 sem mudança do ledger de 31 versões; os cinco helpers legados foram conferidos e GUCs fora de search_path foram omitidos. Respostas malformadas/CLI com erro não vazam saída bruta nem provocam retry; a senha é expurgada inclusive de metadados válidos. Agentes 08, 09 e 07: APROVADO somente para diagnóstico; escrita remota permanece bloqueada.
 

@@ -224,7 +224,7 @@ Estado em 18/09/2026: o Marco 1 administrativo foi concluído e implantado no Su
 
 Atualização de 03/11/2026: a administração foi adaptada a memberships e tenant ativo na migration adicional 32, com RPCs explícitas por empresa, autorização canônica, auditoria e bloqueio comercial. Alterações de acesso afetam apenas o vínculo da empresa selecionada; a identidade global e a empresa principal são preservadas. O QA secundário permite usar o login existente em uma empresa TESTE isolada; implantação remota depende do checkpoint e da verificação operacional. Ver `docs/planos/EMPRESA-TESTE-DOCUMENTOS.md`.
 
-Estado em 09/11/2026: a tentativa remota da32 falhou por uma policy do baseline ausente. O rollout e a criação TESTE permanecem bloqueados até o diagnóstico somente de leitura do estado real e revisão da correção. A32 não deve ser repetida automaticamente; ver o procedimento de diagnóstico no mesmo plano.
+Estado em 10/11/2026: a falha remota da32 foi isolada como dependência de nomes de policies do fixture. A revisão da32 ainda pendente usa guards SELECT restritivos e verificação automática dos metadados remotos antes de qualquer escrita, repetida dentro da transação. As31 aplicadas permanecem imutáveis. A retomada exige gates e checkpoint local verde; estado parcial ou divergente é bloqueado sem repair. Implantação e criação TESTE ainda aguardam confirmação remota; ver o procedimento no mesmo plano.
 
 O **Marco 1.5 — Fundação SaaS** foi concluído em sua base arquitetural: membership/tenant ativo, trial self-service, onboarding, planos/entitlements, estado comercial, ciclo abstrato de assinatura e intenções de contratação provider-neutral. A integração com o provedor de pagamento real foi deliberadamente adiada até a aplicação operacional estar madura. O trabalho corrente passa ao **Marco 2 — Documentos + Agenda BPF**.
 
@@ -405,4 +405,4 @@ Se uma implementação entrar em conflito com esta referência, a divergência d
 **Projeto:** BPF Manager  
 **Documento:** Referência geral do projeto  
 **Status:** Ativo  
-**Última atualização:** 09/11/2026
+**Última atualização:** 10/11/2026
